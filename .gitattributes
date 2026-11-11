@@ -1,0 +1,5 @@
+# Keep line endings consistent in the repository whatever machine it's checked out on.
+* text=auto eol=lf
+# Data that must never be altered.
+*.gz binary
+*.png binary

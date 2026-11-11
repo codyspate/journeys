@@ -1,0 +1,88 @@
+[
+  {
+    "name": "get_current_flight",
+    "description": "Where the player is right now in Microsoft Flight Simulator: position, altitude, speed, heading, fuel, the nearest airport, the active Journey leg and how far it is to its next stop. Use this first for questions like \"what am I flying over?\".",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "find_airports_nearby",
+    "description": "Airports near a point (by default, near the aircraft), nearest first, with runway length and elevation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude in degrees. Defaults to the aircraft."
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude in degrees. Defaults to the aircraft."
+        },
+        "radius_nm": {
+          "type": "number",
+          "description": "Search radius in nautical miles, up to 150. Default 30."
+        },
+        "limit": {
+          "type": "number",
+          "description": "How many to return. Default 10."
+        }
+      }
+    }
+  },
+  {
+    "name": "get_journeys",
+    "description": "The player's multi-leg trips: each Journey's route, which legs are flown and which are planned, and the next leg.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "get_logbook",
+    "description": "Recent logged flights, newest first: aircraft, airports, times, distance, landing rate and the player’s notes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number",
+          "description": "How many flights. Default 20, at most 200."
+        }
+      }
+    }
+  },
+  {
+    "name": "get_flight",
+    "description": "One logged flight in detail: landings, events such as stalls or overspeeds, the player’s note and photo count.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "flight_id": {
+          "type": "string",
+          "description": "An id from get_logbook."
+        }
+      },
+      "required": [
+        "flight_id"
+      ]
+    }
+  },
+  {
+    "name": "get_hangar",
+    "description": "The player's aircraft and where each one is parked.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "get_places",
+    "description": "Airports the player pinned: their home field, places they have been, and places they want to go.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+]

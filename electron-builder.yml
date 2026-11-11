@@ -1,0 +1,45 @@
+# Builds the Windows installer and publishes releases that the app updates itself from.
+appId: com.journeys.companion
+productName: Journeys
+copyright: Copyright © 2026 Journeys
+directories:
+  output: release
+  buildResources: build
+
+# Only what the app needs at run time goes into the package.
+files:
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
+  - resources/**
+  - package.json
+  - "!**/*.map"
+
+# The MCP server is started by AI apps such as Claude Desktop, so it lives beside the app as a plain file.
+extraResources:
+  - from: out/mcp
+    to: mcp
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # Unsigned for now. Windows SmartScreen will warn until a signing certificate is added here.
+
+nsis:
+  # Installs for the current user, with no admin prompt, which also lets updates install quietly.
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Journeys
+  artifactName: Journeys-Setup-${version}.${ext}
+  # Player data in %APPDATA%\journeys is never removed by uninstalling.
+  deleteAppDataOnUninstall: false
+
+# Where updates come from: this repository's GitHub Releases.
+publish:
+  provider: github
+  owner: codyspate
+  repo: journeys
+  releaseType: release
