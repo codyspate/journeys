@@ -1,6 +1,6 @@
 import { type GeoJSONSource, Map as MapLibreMap, NavigationControl, Popup } from 'maplibre-gl'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import type { AircraftFlight } from '../../shared/logbook'
+import { type AircraftFlight, airMinutes } from '../../shared/logbook'
 import { aircraftTracks, routeLabel } from './aircraftTracks'
 import { OUTLINE, STYLE_URL } from './mapSetup'
 
@@ -9,10 +9,6 @@ const HIGHLIGHT = '#f2b544'
 const HOVER_PX = 6
 
 const hoursMinutes = (minutes: number) => `${Math.floor(minutes / 60)}h ${String(Math.round(minutes % 60)).padStart(2, '0')}m`
-const airMinutes = ({ flight }: AircraftFlight) => {
-  const end = flight.landedAt ?? flight.endedAt
-  return flight.takeoffAt && end ? (end - flight.takeoffAt) / 60000 : null
-}
 
 /** Every flight one aircraft has made, loaded for its Hangar card. */
 export function AircraftMap({ airframeKey }: { airframeKey: string }) {
@@ -193,7 +189,7 @@ export function FlightsMap({
       {flights && (
         <ul className="aircraft-flight-list" onMouseLeave={() => setHovered(null)}>
           {flights.map((entry) => {
-            const minutes = airMinutes(entry)
+            const minutes = airMinutes(entry.flight)
             const id = entry.flight.id
             return (
               <li key={id}>

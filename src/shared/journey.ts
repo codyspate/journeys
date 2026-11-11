@@ -99,6 +99,7 @@ export interface TopOfDescent {
   /** How far out descent starts, measured back from the stop. */
   descentNm: number
   distanceToTodNm: number
+  /** Real minutes until top of descent at the current groundspeed and sim rate. */
   minutesToTod: number
   fromAltFt: number
   toAltFt: number

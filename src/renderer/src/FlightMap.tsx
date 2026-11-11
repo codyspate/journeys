@@ -18,7 +18,7 @@ const HOVER_PX = 10
 
 function tooltip(point: PlottedPoint, startedAt: number): HTMLElement {
   const root = document.createElement('div')
-  const minutes = Math.max(0, Math.round((point.t - startedAt) / 60000))
+  const minutes = Math.max(0, Math.round(point.simSeconds !== null ? point.simSeconds / 60 : (point.t - startedAt) / 60000))
   const title = document.createElement('strong')
   title.textContent = `${new Date(point.t).toLocaleTimeString()} · ${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')} in`
   root.append(title)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { FlightJournal, FlightPhoto, FlightStatus, LogbookFlight } from '../../shared/logbook'
+import { airMinutes, blockMinutes, type FlightJournal, type FlightPhoto, type FlightStatus, type LogbookFlight } from '../../shared/logbook'
 import { Atlas } from './Atlas'
 import { FlightJournalPanel, Lightbox } from './FlightJournal'
 import { FlightMap } from './FlightMap'
@@ -13,9 +13,10 @@ const STATUS_LABEL: Record<FlightStatus, string> = {
   interrupted: 'Interrupted'
 }
 
-function duration(from: number | null, to: number | null): string {
-  if (from === null || to === null) return '—'
-  const minutes = Math.round((to - from) / 60000)
+/** Sim time, so a flight flown at 4x shows how long it took in the sim. */
+function duration(simMinutes: number | null): string {
+  if (simMinutes === null) return '—'
+  const minutes = Math.round(simMinutes)
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`
 }
 
@@ -116,8 +117,8 @@ export function Logbook() {
               >
                 <td>{new Date(flight.startedAt).toLocaleString()}</td>
                 <td>{flight.aircraft?.title ?? 'Unknown'}</td>
-                <td>{duration(flight.startedAt, flight.endedAt)}</td>
-                <td>{duration(flight.takeoffAt, flight.landedAt)}</td>
+                <td>{duration(blockMinutes(flight))}</td>
+                <td>{duration(airMinutes(flight))}</td>
                 <td>{flight.distanceNm.toFixed(0)} nm</td>
                 <td>{Math.round(flight.maxAltitudeFt).toLocaleString()} ft</td>
                 <td>{(flight.fuelStartGal - flight.fuelEndGal).toFixed(1)} gal</td>

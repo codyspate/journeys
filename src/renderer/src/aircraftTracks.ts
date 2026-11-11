@@ -1,5 +1,5 @@
 import type { FeatureCollection, LineString, Point } from 'geojson'
-import { type AircraftFlight, isRealPosition } from '../../shared/logbook'
+import { type AircraftFlight, airMinutes as flightAirMinutes, isRealPosition } from '../../shared/logbook'
 import { unwrapLongitudes } from './mapData'
 
 export interface AircraftTracks {
@@ -38,10 +38,7 @@ export function aircraftTracks(flights: AircraftFlight[]): AircraftTracks {
     }
   }
 
-  const airMinutes = flights.reduce((sum, { flight }) => {
-    const end = flight.landedAt ?? flight.endedAt
-    return flight.takeoffAt && end ? sum + (end - flight.takeoffAt) / 60000 : sum
-  }, 0)
+  const airMinutes = flights.reduce((sum, { flight }) => sum + (flightAirMinutes(flight) ?? 0), 0)
 
   return {
     lines: { type: 'FeatureCollection', features: lines },

@@ -1,7 +1,7 @@
 {
   "name": "journeys",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A free-form companion app for MSFS 2024",
   "author": "Cody Spate",
   "license": "GPL-3.0-or-later",

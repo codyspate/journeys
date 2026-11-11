@@ -1,4 +1,12 @@
-import { type FlightEvent, isRealPosition, type LandingRecord, type LogbookFlight, SIM_PAUSED_ITSELF, type TelemetrySample } from '../shared/logbook'
+import {
+  type FlightEvent,
+  isRealPosition,
+  type LandingRecord,
+  type LogbookFlight,
+  SIM_PAUSED_ITSELF,
+  simSecondsBetween,
+  type TelemetrySample
+} from '../shared/logbook'
 
 const START_MOVING_KTS = 3
 const START_AIRBORNE_KTS = 30
@@ -128,6 +136,8 @@ export class FlightRecorder {
       distanceNm: 0,
       maxAltitudeFt: sample.altFt,
       maxG: sample.gForce,
+      simSeconds: 0,
+      airSimSeconds: 0,
       fuelStartGal: sample.fuelGal,
       fuelEndGal: sample.fuelGal,
       landings: [],
@@ -144,6 +154,10 @@ export class FlightRecorder {
     flight.maxAltitudeFt = Math.max(flight.maxAltitudeFt, sample.altFt)
     flight.maxG = Math.max(flight.maxG, sample.gForce)
     flight.fuelEndGal = sample.fuelGal
+    // Times are kept in sim time, so a flight at 4x logs the hour it really took, not 15 minutes.
+    const simSeconds = simSecondsBetween(previous, sample)
+    flight.simSeconds = (flight.simSeconds ?? 0) + simSeconds
+    if (!previous.onGround && !sample.onGround) flight.airSimSeconds = (flight.airSimSeconds ?? 0) + simSeconds
 
     const add = (type: FlightEvent['type'], value: number) => flight.events.push({ t: sample.t, type, value })
     if (sample.stall && !previous.stall) add('stall', 1)

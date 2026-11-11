@@ -40,6 +40,35 @@ export function isRealPosition(lat: number, lon: number): boolean {
   return Math.abs(lat) > 0.01 || !PLACEHOLDER_LONGITUDES.some((placeholder) => Math.abs(lon - placeholder) <= 0.01)
 }
 
+/** A longer silence than this between samples means the app or sim stalled; that time isn't counted. */
+const MAX_SAMPLE_GAP_S = 30
+
+/**
+ * How much sim time passed between two telemetry samples: real seconds times the sim rate, and none
+ * while the sim is paused. Flight times, fuel burn and time-to-go all need sim time, not wall-clock time.
+ */
+export function simSecondsBetween(previous: { t: number }, sample: { t: number; simRate?: number; pauseFlags?: number }): number {
+  if (sample.pauseFlags) return 0
+  const real = (sample.t - previous.t) / 1000
+  if (!(real > 0) || real > MAX_SAMPLE_GAP_S) return 0
+  const rate = sample.simRate && sample.simRate > 0 ? sample.simRate : 1
+  return real * rate
+}
+
+/** Time in the air, in sim minutes. Older flights, logged before sim time was kept, fall back to the clock. */
+export function airMinutes(flight: Pick<LogbookFlight, 'takeoffAt' | 'landedAt' | 'endedAt' | 'airSimSeconds'>): number | null {
+  if (flight.takeoffAt === null) return null
+  if (flight.airSimSeconds != null) return flight.airSimSeconds / 60
+  const end = flight.landedAt ?? flight.endedAt
+  return end ? (end - flight.takeoffAt) / 60000 : null
+}
+
+/** Block time, start to end, in sim minutes, with the same fallback for older flights. */
+export function blockMinutes(flight: Pick<LogbookFlight, 'startedAt' | 'endedAt' | 'simSeconds'>): number | null {
+  if (flight.simSeconds != null && flight.endedAt) return flight.simSeconds / 60
+  return flight.endedAt ? (flight.endedAt - flight.startedAt) / 60000 : null
+}
+
 /** The sim's own pause flags (SimConnect Pause_EX1). 8 means the sim paused itself, as on its end-of-flight screen. */
 export const SIM_PAUSED_ITSELF = 8
 
@@ -72,6 +101,8 @@ export interface FlightEvent {
 /** One recorded moment of a flight, trimmed to what the flight map draws. */
 export interface TrackPoint {
   t: number
+  /** Sim time since the flight started. Missing from tracks served by older versions. */
+  simSeconds?: number
   lat: number
   lon: number
   altFt: number
@@ -136,6 +167,10 @@ export interface LogbookFlight {
   distanceNm: number
   maxAltitudeFt: number
   maxG: number
+  /** Sim time from start to end, which differs from the clock when the sim rate isn't 1x. Missing on older flights. */
+  simSeconds?: number
+  /** Sim time spent airborne. Missing on older flights. */
+  airSimSeconds?: number
   fuelStartGal: number
   fuelEndGal: number
   landings: LandingRecord[]

@@ -18,6 +18,8 @@ export interface DescentTarget {
   elevationFt: number
 }
 
+const simRate = (sample: TelemetrySample) => (sample.simRate > 0 ? sample.simRate : 1)
+
 /** Where descent should start for the target, from the aircraft's current altitude and groundspeed. */
 export function topOfDescent(sample: TelemetrySample, target: DescentTarget, settings: DescentSettings): TopOfDescent {
   const toAltFt = target.elevationFt + settings.arriveAboveFieldFt
@@ -31,7 +33,8 @@ export function topOfDescent(sample: TelemetrySample, target: DescentTarget, set
     distanceToTargetNm,
     descentNm,
     distanceToTodNm,
-    minutesToTod: sample.gsKts > 0 ? (distanceToTodNm / sample.gsKts) * 60 : Infinity,
+    // Groundspeed is in sim time; divide by the sim rate so the warning comes the chosen real minutes ahead.
+    minutesToTod: sample.gsKts > 0 ? (distanceToTodNm / sample.gsKts) * 60 / simRate(sample) : Infinity,
     fromAltFt: sample.altFt,
     toAltFt
   }

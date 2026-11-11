@@ -1,4 +1,4 @@
-import type { LogbookFlight } from '../shared/logbook'
+import { airMinutes, type LogbookFlight } from '../shared/logbook'
 import {
   type Airport,
   type CreateJourneyInput,
@@ -431,7 +431,7 @@ export function applyFlight(journey: Journey, flight: LogbookFlight, index: Airp
   const to: Stop = airport ? toStop(airport) : { ident: 'OFF-FIELD', name: 'Off-airport landing', lat, lon }
   if (to.ident === from.ident) return null
 
-  const minutes = flight.takeoffAt && flight.landedAt ? (flight.landedAt - flight.takeoffAt) / 60000 : 0
+  const minutes = flight.landedAt ? (airMinutes(flight) ?? 0) : 0
   const flown: Leg = {
     id: `flown-${flight.id}`,
     from,

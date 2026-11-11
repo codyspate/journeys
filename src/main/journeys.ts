@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { gunzipSync } from 'node:zlib'
 import { AirportIndex, airportsFromRows, type AirportRow } from '../core/airports'
 import { applyFlight, createJourney, editRoute, reachOptions, reflow, updateSettings } from '../core/planner'
+import { BurnMeter } from '../core/burn'
 import { type Terrain, TerrainGrid } from '../core/terrain'
 import type { DescentTarget } from '../core/descent'
 import {
@@ -19,8 +20,6 @@ import {
 } from '../shared/journey'
 import type { LogbookFlight, TelemetrySample } from '../shared/logbook'
 
-const BURN_WINDOW_MS = 120_000
-const BURN_MIN_SPAN_MS = 60_000
 const REACH_INTERVAL_MS = 10_000
 
 // Older Journeys have no avoid list or route limits.
@@ -47,7 +46,7 @@ export class JourneyService {
   readonly airports: AirportIndex
   readonly terrain: Terrain | undefined
   private readonly db: DatabaseSync
-  private fuelHistory: { t: number; fuelGal: number }[] = []
+  private readonly burn = new BurnMeter()
   private lastReachAt = 0
 
   constructor(databasePath: string, airportsPath: string, terrainPath: string) {
@@ -139,10 +138,10 @@ export class JourneyService {
 
   /** Returns fresh reach options every few seconds while airborne. */
   reach(sample: TelemetrySample): ReachOptions | null {
-    this.fuelHistory.push({ t: sample.t, fuelGal: sample.fuelGal })
-    while (this.fuelHistory[0].t < sample.t - BURN_WINDOW_MS) this.fuelHistory.shift()
+    this.burn.add(sample)
 
-    if (sample.onGround || sample.t - this.lastReachAt < REACH_INTERVAL_MS) return null
+    // Fuel and groundspeed are both in sim time, so the reach stays right at any sim rate.
+    if (sample.onGround || sample.pauseFlags || sample.t - this.lastReachAt < REACH_INTERVAL_MS) return null
     this.lastReachAt = sample.t
     const journey = this.current()
     if (!journey) return null
@@ -153,20 +152,11 @@ export class JourneyService {
         lat: sample.lat,
         lon: sample.lon,
         fuelGal: sample.fuelGal,
-        burnGph: this.liveBurn(sample) ?? journey.performance.burnGph,
+        burnGph: this.burn.gallonsPerHour() ?? journey.performance.burnGph,
         gsKts: sample.gsKts
       },
       this.airports.all
     )
-  }
-
-  private liveBurn(sample: TelemetrySample): number | null {
-    const oldest = this.fuelHistory[0]
-    const span = sample.t - oldest.t
-    if (span < BURN_MIN_SPAN_MS) return null
-    const used = oldest.fuelGal - sample.fuelGal
-    if (used <= 0) return null
-    return (used / (span / 3_600_000)) / Math.max(1, sample.simRate)
   }
 
   close(): void {

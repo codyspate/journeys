@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
-import type { LogbookFlight, TelemetrySample, TrackPoint } from '../shared/logbook'
+import { type LogbookFlight, simSecondsBetween, type TelemetrySample, type TrackPoint } from '../shared/logbook'
 
 const TRIVIAL_DISTANCE_NM = 0.5
 const STOPPED_KTS = 1
@@ -62,16 +62,17 @@ export class Logbook {
     const rows = this.db.prepare('SELECT data FROM samples WHERE flight_id = ? ORDER BY t').all(flightId)
     const step = Math.max(1, Math.ceil(rows.length / maxPoints))
     const points: TrackPoint[] = []
-    for (let i = 0; i < rows.length; i += step) {
-      const s = JSON.parse(String(rows[i].data)) as TelemetrySample
-      points.push({ t: s.t, lat: s.lat, lon: s.lon, altFt: s.altFt, aglFt: s.aglFt, gsKts: s.gsKts, onGround: Boolean(s.onGround) })
-    }
-    // Always end where the flight ended.
-    const last = rows.at(-1)
-    if (last && (rows.length - 1) % step !== 0) {
-      const s = JSON.parse(String(last.data)) as TelemetrySample
-      points.push({ t: s.t, lat: s.lat, lon: s.lon, altFt: s.altFt, aglFt: s.aglFt, gsKts: s.gsKts, onGround: Boolean(s.onGround) })
-    }
+    // Every sample counts towards sim time, even the ones thinned out of the drawn line.
+    let previous: TelemetrySample | null = null
+    let simSeconds = 0
+    rows.forEach((row, i) => {
+      const s = JSON.parse(String(row.data)) as TelemetrySample
+      if (previous) simSeconds += simSecondsBetween(previous, s)
+      previous = s
+      // Always end where the flight ended.
+      if (i % step !== 0 && i !== rows.length - 1) return
+      points.push({ t: s.t, simSeconds, lat: s.lat, lon: s.lon, altFt: s.altFt, aglFt: s.aglFt, gsKts: s.gsKts, onGround: Boolean(s.onGround) })
+    })
     return points
   }
 

@@ -17,6 +17,8 @@ const MAX_STOPS = 400
 
 export interface PlottedPoint {
   t: number
+  /** Sim time since the flight started, or null if unknown. */
+  simSeconds: number | null
   lon: number
   lat: number
   altFt: number
@@ -50,6 +52,7 @@ export function buildTrack(raw: TrackPoint[], landings: LandingRecord[] = []): F
   const total = along.at(-1)! || 1
   const points = usable.map((p, i) => ({
     t: p.t,
+    simSeconds: p.simSeconds ?? null,
     lon: lons[i],
     lat: p.lat,
     altFt: p.altFt,

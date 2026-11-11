@@ -6,7 +6,7 @@ import type { AirportIndex } from '../core/airports'
 import { distanceNm, hasPosition } from '../core/recorder'
 import type { AirframeRecord } from '../shared/airframe'
 import type { Journey, Place } from '../shared/journey'
-import type { FlightJournal, LogbookFlight, TelemetrySample } from '../shared/logbook'
+import { airMinutes, type FlightJournal, type LogbookFlight, type TelemetrySample } from '../shared/logbook'
 
 /** Where the MCP server finds the running app. Readable only by this Windows user, like the rest of the app's data. */
 export const ENDPOINT_FILE = 'mcp-endpoint.json'
@@ -83,6 +83,7 @@ export interface AssistantSources {
 }
 
 const round = (value: number, places = 0) => Number(value.toFixed(places))
+const nullableRound = (value: number | null) => (value === null ? null : round(value))
 
 /** Compass bearing from one point to another, in whole degrees true. */
 function bearing(from: { lat: number; lon: number }, to: { lat: number; lon: number }): number {
@@ -128,7 +129,7 @@ function flightSummary(sources: AssistantSources, flight: LogbookFlight, journal
     started: new Date(flight.startedAt).toISOString(),
     from: flight.startedAirborne ? 'started in the air' : airportName(sources, flight.origin),
     to: flight.landings.length > 0 ? airportName(sources, flight.destination) : null,
-    air_minutes: flight.takeoffAt && (flight.landedAt ?? flight.endedAt) ? round(((flight.landedAt ?? flight.endedAt)! - flight.takeoffAt) / 60000) : null,
+    air_minutes: nullableRound(airMinutes(flight)),
     distance_nm: round(flight.distanceNm, 1),
     max_altitude_ft: round(flight.maxAltitudeFt),
     fuel_used_gal: round(flight.fuelStartGal - flight.fuelEndGal, 1),
