@@ -36,6 +36,13 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+      # electron-builder uploads files in parallel. With no release yet, each upload can create its own
+      # release for the tag, splitting the installer and latest.yml apart. Creating it first avoids that.
+      - name: Create the release
+        run: gh release create "$GITHUB_REF_NAME" --title "Journeys ${GITHUB_REF_NAME#v}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and publish
         run: npm run release
         env:
