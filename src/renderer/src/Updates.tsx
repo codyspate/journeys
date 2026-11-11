@@ -90,6 +90,14 @@ export function VersionSettings() {
           Check for updates
         </button>
       )}
+      <p className="muted legal">
+        Copyright © 2026 Cody Spate. Journeys is free software under the GNU General Public License, version 3 or later, and
+        comes with no warranty. Source code, the full license and releases are at{' '}
+        <a href="https://github.com/codyspate/journeys" target="_blank" rel="noreferrer">
+          github.com/codyspate/journeys
+        </a>
+        .
+      </p>
     </div>
   )
 }

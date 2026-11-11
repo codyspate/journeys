@@ -706,6 +706,10 @@ table.flights tbody tr:focus-visible {
   max-width: 760px;
 }
 
+.legal a {
+  color: var(--accent);
+}
+
 .settings-page h3 {
   margin-top: 28px;
 }

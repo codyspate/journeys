@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
 import { AirframeTracker } from '../core/airframes'
 import { DescentWatcher } from '../core/descent'
 import { FlightRecorder, hasPosition } from '../core/recorder'
@@ -51,6 +51,11 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#0e1420',
     autoHideMenuBar: true,
     webPreferences: { preload: join(__dirname, '../preload/index.js') }
+  })
+  // Web links open in the player's browser, never in a bare app window.
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
   })
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (devUrl) void window.loadURL(devUrl)

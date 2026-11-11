@@ -24,7 +24,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  # Unsigned for now. Windows SmartScreen will warn until a signing certificate is added here.
+  # Unsigned. Windows SmartScreen warns on first run; a signing certificate would be configured here.
 
 nsis:
   # Installs for the current user, with no admin prompt, which also lets updates install quietly.
