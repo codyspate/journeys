@@ -1,7 +1,7 @@
 # Builds the Windows installer and publishes releases that the app updates itself from.
 appId: com.journeys.companion
 productName: Journeys
-copyright: Copyright © 2026 Journeys
+copyright: Copyright © 2026 Cody Spate
 directories:
   output: release
   buildResources: build

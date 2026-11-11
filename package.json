@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "description": "A free-form companion app for MSFS 2024",
-  "author": "Journeys",
+  "author": "Cody Spate",
+  "license": "MIT",
   "homepage": "https://github.com/codyspate/journeys",
   "main": "out/main/index.js",
   "scripts": {
