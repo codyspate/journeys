@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Settings as AppSettings } from '../../shared/airframe'
+import { errorText } from './errors'
 import { PhotoSettingsPanel } from './FlightJournal'
 import { VersionSettings } from './Updates'
 import { AssistantAccess, YourData } from './YourData'
@@ -26,13 +27,67 @@ function Toggle({
   )
 }
 
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="field small">
+      <span>{label}</span>
+      <input type="number" min={0} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </label>
+  )
+}
+
+/** Saved together, so a half-typed number is never used. */
+function DescentTiming({ settings, onSave }: { settings: AppSettings; onSave: (changes: Partial<AppSettings>) => Promise<void> }) {
+  const [draft, setDraft] = useState(settings.descent)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => setDraft(settings.descent), [settings.descent])
+  const changed = JSON.stringify(draft) !== JSON.stringify(settings.descent)
+  const set = (key: 'minutesBefore' | 'angleDeg' | 'arriveAboveFieldFt') => (value: number) => setDraft({ ...draft, [key]: value })
+  return (
+    <div className="descent-timing">
+      <div className="fields">
+        <NumberField label="Minutes before" value={draft.minutesBefore} onChange={set('minutesBefore')} />
+        <NumberField label="Descent angle (°)" value={draft.angleDeg} onChange={set('angleDeg')} />
+        <NumberField label="Level off above field (ft)" value={draft.arriveAboveFieldFt} onChange={set('arriveAboveFieldFt')} />
+      </div>
+      <p className="muted settings-note">3° is about 300 ft per nautical mile. The defaults are 2 minutes, 3° and 1,500 ft.</p>
+      {changed && (
+        <div className="save-actions">
+          <button
+            onClick={async () => {
+              setError(null)
+              try {
+                await onSave({ descent: { ...draft, pauseBeforeTod: settings.descent.pauseBeforeTod } })
+              } catch (e) {
+                setError(errorText(e))
+              }
+            }}
+          >
+            Save timing
+          </button>
+          <button className="link" onClick={() => setDraft(settings.descent)}>
+            Undo changes
+          </button>
+        </div>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** Every app-wide setting in one place. Per-Journey options stay with each Journey's route settings. */
 export function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   useEffect(() => {
     void window.journeys.getSettings().then(setSettings)
   }, [])
-  const update = async (changes: Partial<AppSettings>) => setSettings(await window.journeys.updateSettings(changes))
+  const update = async (changes: Partial<AppSettings>) => {
+    setSettings(await window.journeys.updateSettings(changes))
+  }
 
   return (
     <section className="logbook settings-page">
@@ -55,6 +110,19 @@ export function Settings() {
               </span>
             )}
           </Toggle>
+
+          <h3>Top of descent</h3>
+          <Toggle
+            checked={settings.descent.pauseBeforeTod}
+            onChange={(on) => void update({ descent: { ...settings.descent, pauseBeforeTod: on } })}
+            title="Pause the sim before top of descent"
+          >
+            <span className="muted">
+              While you fly a leg of a Journey, Journeys works out where to start down to the next stop from your altitude and groundspeed, and
+              pauses the sim this long before, once per leg. You can also switch it on and off from Home during a flight.
+            </span>
+          </Toggle>
+          <DescentTiming settings={settings} onSave={update} />
 
           <h3>Maps</h3>
           <Toggle

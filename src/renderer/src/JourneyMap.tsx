@@ -5,7 +5,7 @@ import type { AirportSize, Journey, RouteEdit } from '../../shared/journey'
 import { airportFeatures, type AirportProperties, journeyMapData, routeIdents, type StopProperties } from './mapData'
 import { LABEL_FONT, STYLE_URL } from './mapSetup'
 
-const COLOR = { flown: '#5fd08a', planned: '#f2b544', tentative: '#8f9db3', stop: '#e6ebf3', outline: '#0e1420' }
+const COLOR = { flown: '#5fd08a', planned: '#f2b544', tentative: '#8f9db3', stop: '#e6ebf3', outline: '#0e1420', vor: '#7fc9d9' }
 const CLICK_MARGIN_PX = 6
 
 // Smaller fields appear as you zoom in. Listed bottom to top, so bigger airports win a crowded click.
@@ -76,6 +76,7 @@ function addRouteLayers(map: MapLibreMap): void {
   const empty: FeatureCollection = { type: 'FeatureCollection', features: [] }
   map.addSource('journey-lines', { type: 'geojson', data: empty })
   map.addSource('journey-stops', { type: 'geojson', data: empty })
+  map.addSource('journey-vors', { type: 'geojson', data: empty })
 
   map.addLayer({
     id: 'journey-lines-solid',
@@ -91,6 +92,27 @@ function addRouteLayers(map: MapLibreMap): void {
     source: 'journey-lines',
     filter: ['==', ['get', 'status'], 'tentative'],
     paint: { 'line-width': 2.5, 'line-color': COLOR.tentative, 'line-dasharray': [2, 2] }
+  })
+  // VORs sit under the stops, as small hollow rings, so the stops stay what you drag and click.
+  map.addLayer({
+    id: 'journey-vors-rings',
+    type: 'circle',
+    source: 'journey-vors',
+    paint: { 'circle-radius': 4, 'circle-color': COLOR.outline, 'circle-stroke-width': 2, 'circle-stroke-color': COLOR.vor }
+  })
+  map.addLayer({
+    id: 'journey-vors-labels',
+    type: 'symbol',
+    source: 'journey-vors',
+    minzoom: 5,
+    layout: {
+      'text-field': ['concat', ['get', 'ident'], ' ', ['get', 'frequency']],
+      'text-font': LABEL_FONT,
+      'text-size': 11,
+      'text-offset': [0, -1],
+      'text-anchor': 'bottom'
+    },
+    paint: { 'text-color': COLOR.vor, 'text-halo-color': COLOR.outline, 'text-halo-width': 1.5 }
   })
   map.addLayer({
     id: 'journey-stops-dots',
@@ -423,6 +445,7 @@ export function JourneyMap({ journey, fallback, onEdit }: JourneyMapProps) {
     latest.current.data = data
     ;(map.getSource('journey-lines') as GeoJSONSource).setData(data.lines)
     ;(map.getSource('journey-stops') as GeoJSONSource).setData(data.stops)
+    ;(map.getSource('journey-vors') as GeoJSONSource).setData(data.vors)
     fit.current = () => map.fitBounds(data.bounds, { padding: 56, maxZoom: 9, animate: false })
     popup.current?.remove()
     clearDrag.current()

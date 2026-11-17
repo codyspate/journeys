@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { type DescentSettings, type JourneySettings, type Performance, PERFORMANCE_PRESETS, type RouteLimits } from '../../shared/journey'
+import { type JourneySettings, type Performance, PERFORMANCE_PRESETS, type RouteLimits } from '../../shared/journey'
 import { errorText } from './errors'
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
@@ -39,9 +39,7 @@ function useTerrainAvailable(): boolean {
 
 export function SettingsFields({ settings, onChange }: { settings: JourneySettings; onChange: (settings: JourneySettings) => void }) {
   const hasTerrain = useTerrainAvailable()
-  const { performance, limits, descent } = settings
-  const setDescent = (key: keyof DescentSettings) => (value: number | boolean) =>
-    onChange({ ...settings, descent: { ...descent, [key]: value } })
+  const { performance, limits } = settings
   const setPerformance = (key: keyof Performance) => (value: number | boolean) =>
     onChange({ ...settings, performance: { ...performance, [key]: value } })
   const setLimit = (key: keyof RouteLimits) => (value: number | null) => onChange({ ...settings, limits: { ...limits, [key]: value } })
@@ -101,24 +99,23 @@ export function SettingsFields({ settings, onChange }: { settings: JourneySettin
           : 'Terrain data is missing from this install, so the highest altitude and water limits have no effect.'}
       </p>
 
-      <h3>Top of descent</h3>
+      <h3>Navigation</h3>
       <label className="checkbox">
         <input
           type="checkbox"
-          checked={descent.pauseBeforeTod}
-          onChange={(e) => setDescent('pauseBeforeTod')(e.target.checked)}
+          checked={limits.vorRoutes}
+          onChange={(e) => onChange({ ...settings, limits: { ...limits, vorRoutes: e.target.checked } })}
         />
-        Pause the sim before top of descent
+        Plan radio navigation routes (VOR to VOR)
       </label>
-      <div className="fields">
-        <NumberField label="Minutes before" value={descent.minutesBefore} onChange={setDescent('minutesBefore')} />
-        <NumberField label="Descent angle (°)" value={descent.angleDeg} onChange={setDescent('angleDeg')} />
-        <NumberField label="Level off above field (ft)" value={descent.arriveAboveFieldFt} onChange={setDescent('arriveAboveFieldFt')} />
-      </div>
       <p className="muted settings-note">
-        While you fly a leg of this Journey, Journeys works out where to start down to the next stop from your altitude and groundspeed,
-        and pauses the sim this many minutes before, once per leg. 3° is about 300 ft per nautical mile.
+        A light VFR aid: each leg becomes a chain of VORs, with the radial out of each station, the course into the next, and
+        a hemispheric VFR altitude to consider. Only stops reachable that way are chosen, with the routed distance kept within your
+        longest leg and every stretch within your terrain and water limits. Stations are counted on out to their low-altitude
+        range, 40 nm (25 nm for terminal VORs). Where VORs are too sparse, legs fall back to direct. Station data comes from
+        OurAirports and may differ from your sim.
       </p>
+
     </>
   )
 }

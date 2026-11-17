@@ -6,18 +6,20 @@ import { gunzipSync } from 'node:zlib'
 import { AirportIndex, airportsFromRows, type AirportRow } from '../core/airports'
 import { applyFlight, createJourney, editRoute, reachOptions, reflow, updateSettings } from '../core/planner'
 import { BurnMeter } from '../core/burn'
-import { type Terrain, TerrainGrid } from '../core/terrain'
+import { legBrief, type Town, type TownRow, townsFromRows } from '../core/legBrief'
+import { TerrainGrid } from '../core/terrain'
+import { type VorRow, vorsFromRows } from '../core/vor'
 import type { DescentTarget } from '../core/descent'
 import {
   type CreateJourneyInput,
-  DEFAULT_DESCENT,
-  type DescentSettings,
   type Journey,
   type JourneySettings,
   NO_LIMITS,
   type ReachOptions,
-  type RouteEdit
+  type RouteEdit,
+  type Vor
 } from '../shared/journey'
+import type { LegBrief, Wind } from '../shared/brief'
 import type { LogbookFlight, TelemetrySample } from '../shared/logbook'
 
 const REACH_INTERVAL_MS = 10_000
@@ -28,12 +30,29 @@ const parseJourney = (data: unknown): Journey => {
   return {
     ...journey,
     avoid: journey.avoid ?? [],
-    limits: { ...NO_LIMITS, ...journey.limits },
-    descent: { ...DEFAULT_DESCENT, ...journey.descent }
+    limits: { ...NO_LIMITS, ...journey.limits }
   } as Journey
 }
 
-function loadTerrain(path: string): Terrain | undefined {
+function loadVors(path: string): Vor[] {
+  try {
+    return vorsFromRows(JSON.parse(readFileSync(path, 'utf8')) as VorRow[])
+  } catch (e) {
+    console.warn('VOR data unavailable; radio navigation routes are off.', e)
+    return []
+  }
+}
+
+function loadTowns(path: string): Town[] {
+  try {
+    return townsFromRows(JSON.parse(readFileSync(path, 'utf8')) as TownRow[])
+  } catch (e) {
+    console.warn('Town data unavailable; nav logs will only use airports as checkpoints.', e)
+    return []
+  }
+}
+
+function loadTerrain(path: string): TerrainGrid | undefined {
   try {
     return TerrainGrid.fromBytes(gunzipSync(readFileSync(path)))
   } catch (e) {
@@ -44,14 +63,17 @@ function loadTerrain(path: string): Terrain | undefined {
 
 export class JourneyService {
   readonly airports: AirportIndex
-  readonly terrain: Terrain | undefined
+  readonly terrain: TerrainGrid | undefined
+  readonly vors: Vor[]
+  private towns: Town[] | null = null
   private readonly db: DatabaseSync
   private readonly burn = new BurnMeter()
   private lastReachAt = 0
 
-  constructor(databasePath: string, airportsPath: string, terrainPath: string) {
+  constructor(databasePath: string, airportsPath: string, terrainPath: string, navaidsPath: string, private readonly townsPath: string) {
     this.airports = new AirportIndex(airportsFromRows(JSON.parse(readFileSync(airportsPath, 'utf8')) as AirportRow[]))
     this.terrain = loadTerrain(terrainPath)
+    this.vors = loadVors(navaidsPath)
     mkdirSync(dirname(databasePath), { recursive: true })
     this.db = new DatabaseSync(databasePath)
     this.db.exec(`
@@ -88,22 +110,22 @@ export class JourneyService {
   }
 
   create(input: CreateJourneyInput): Journey {
-    return this.save(createJourney(input, this.airports, randomUUID(), Date.now(), this.terrain))
+    return this.save(createJourney(input, this.airports, randomUUID(), Date.now(), this.terrain, this.vors))
   }
 
   /** Opening also refreshes the plan, so Journeys made before terrain data existed get it. */
   open(id: string): Journey {
     const journey = this.get(id)
-    const refreshed = journey.status === 'active' ? reflow(journey, this.airports.all, this.terrain) : journey
+    const refreshed = journey.status === 'active' ? reflow(journey, this.airports.all, this.terrain, this.vors) : journey
     return this.save({ ...refreshed, lastOpenedAt: Date.now() })
   }
 
   updateSettings(id: string, settings: JourneySettings): Journey {
-    return this.save(updateSettings(this.get(id), settings, this.airports.all, this.terrain))
+    return this.save(updateSettings(this.get(id), settings, this.airports.all, this.terrain, this.vors))
   }
 
   edit(id: string, edit: RouteEdit): Journey {
-    return this.save(editRoute(this.get(id), edit, this.airports, this.terrain))
+    return this.save(editRoute(this.get(id), edit, this.airports, this.terrain, this.vors))
   }
 
   /** A blank name goes back to the default "KSAN to KBOS" form. */
@@ -122,18 +144,28 @@ export class JourneyService {
   recordFlight(flight: LogbookFlight): Journey | null {
     const journey = this.current()
     if (!journey) return null
-    const updated = applyFlight(journey, flight, this.airports, this.terrain)
+    const updated = applyFlight(journey, flight, this.airports, this.terrain, this.vors)
     return updated ? this.save(updated) : null
   }
 
+  /** A planned leg's kneeboard: terrain profile, cruise altitude, checkpoints and arrival. */
+  brief(journeyId: string, legId: string, wind: Wind | null): LegBrief {
+    const journey = this.get(journeyId)
+    const leg = journey.legs.find((l) => l.id === legId)
+    if (!leg) throw new Error('That leg is no longer on the plan.')
+    // Only loaded once someone opens a kneeboard.
+    this.towns ??= loadTowns(this.townsPath)
+    return legBrief(journey, leg, { airports: this.airports.all, vors: this.vors, towns: this.towns, ground: this.terrain, wind })
+  }
+
   /** The next stop of the Journey being flown, for the top-of-descent pause. */
-  descentTarget(): { target: DescentTarget; settings: DescentSettings; journeyId: string } | null {
+  descentTarget(): { target: DescentTarget; journeyId: string } | null {
     const journey = this.current()
     const next = journey?.legs.find((leg) => leg.status === 'planned')
     const airport = next && this.airports.get(next.to.ident)
     if (!journey || !airport) return null
     const { ident, name, lat, lon, elevationFt } = airport
-    return { target: { ident, name, lat, lon, elevationFt }, settings: journey.descent, journeyId: journey.id }
+    return { target: { ident, name, lat, lon, elevationFt }, journeyId: journey.id }
   }
 
   /** Returns fresh reach options every few seconds while airborne. */

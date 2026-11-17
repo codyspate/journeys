@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { AirportIndex } from '../core/airports'
-import { DEFAULT_DESCENT, type Airport, type Journey, NO_LIMITS } from '../shared/journey'
+import { type Airport, type Journey, NO_LIMITS } from '../shared/journey'
 import type { LogbookFlight, TelemetrySample } from '../shared/logbook'
 import { type AssistantSources, runTool, TOOLS } from './assistant'
 
@@ -38,7 +38,6 @@ const journey: Journey = {
   performance: { name: 'A2A Comanche 250', cruiseKts: 160, burnGph: 14, usableFuelGal: 60, reserveMinutes: 45, minRunwayFt: 2000, needsHardSurface: false },
   maxLegMinutes: 240,
   limits: NO_LIMITS,
-  descent: DEFAULT_DESCENT,
   legs: [
     { id: 'l1', from: KRIU, to: KTRM, status: 'planned', distanceNm: 378, minutes: 142, fuelGal: 33, beyondRange: false, beyondSession: false, pinned: false, confidence: 'firm', flightId: null, aircraft: null }
   ]

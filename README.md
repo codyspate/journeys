@@ -16,6 +16,12 @@ of your travels. It never tells you what you can't do.
   aircraft's range and how long you like to fly. Stop early, go further, drag a stop to another airport: the rest re-plans
   around what you actually did. You still set up each flight yourself, with whatever tools you like.
 - **Respects the terrain.** Optionally keep legs under a ceiling, limit water crossings, or skip high airports.
+- **Old-school VOR navigation, if you want it.** Turn it on for a Journey and every leg becomes a chain of VORs, with
+  the radial out of each, the course into the next, distances and frequencies, all within your leg length and terrain
+  limits. You tune and fly it yourself.
+- **A kneeboard for every leg.** A side view of the terrain with a suggested VFR cruise altitude, a nav log of towns and
+  airports about every 12 nm with course, heading, time and fuel, and an arrival card with runways, pattern altitude and
+  the likely runway for the wind. All suggestions; nothing is enforced and nothing goes to the sim.
 - **Logs every flight in detail.** Path, times, fuel, landing rate, stalls and overspeeds. See any flight on a map coloured
   by altitude, height above ground or speed, add notes, and screenshots taken during a flight are added automatically.
 - **Shows where you've been.** An atlas of every flight and airport, per-aircraft flight maps, and a live map of the flight
@@ -106,8 +112,8 @@ another copy.
 | `src/shared` | Types shared by both sides. |
 | `src/preload` | The bridge between the screens and the main process. |
 | `mcp` | The MCP server that AI apps start to read your flights. |
-| `scripts` | Rebuild the airport and terrain data from their public sources. |
-| `resources` | The bundled airport list and terrain grid. |
+| `scripts` | Rebuild the airport, VOR, town and terrain data from their public sources. |
+| `resources` | The bundled airport and runway list, VOR list, town list and terrain grid. |
 | `docs/SPEC.md` | The product spec: what Journeys is for and why. |
 
 ### Contributing
@@ -128,7 +134,11 @@ The workflow tests, builds and publishes the installer, and installed copies upd
 
 ## Data and credits
 
-- Airports: [OurAirports](https://ourairports.com/data/) (public domain). Rebuild with `scripts/build-airports.mjs`.
+- Airports, runways and VORs: [OurAirports](https://ourairports.com/data/) (public domain). Rebuild with
+  `scripts/build-airports.mjs` and `scripts/build-navaids.mjs`.
+- Town names for nav log checkpoints: [GeoNames](https://www.geonames.org/) `cities5000`, licensed under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); trimmed to name, position, population and country. Rebuild with
+  `scripts/build-places.mjs`.
 - Terrain: [GMTED2010](https://www.usgs.gov/coastal-changes-and-impacts/gmted2010) maximum elevation, USGS (public
   domain). Coastlines and lakes: [Natural Earth](https://www.naturalearthdata.com/) (public domain). Rebuild with
   `scripts/build-terrain.py`.

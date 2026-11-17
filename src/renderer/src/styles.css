@@ -1202,3 +1202,125 @@ tr.unavailable td,
 tr.skipped td {
   color: var(--muted);
 }
+
+/* A leg's VOR route: one row per stretch, with what to set and how far. */
+.vor-route {
+  margin: 8px 0 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.vor-route ol {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2px 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vor-route li {
+  display: contents;
+}
+.vor-route-points {
+  color: #7fc9d9;
+  white-space: nowrap;
+}
+.vor-route-nm {
+  color: var(--muted);
+  text-align: right;
+}
+.vor-route-cruise {
+  margin: 6px 0 0;
+}
+
+/* A leg's kneeboard: cruise, terrain profile, nav log and arrival, folded away until opened. */
+.kneeboard {
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+.kneeboard > summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.kneeboard h4 {
+  margin: 14px 0 4px;
+  font-size: 13px;
+}
+.kneeboard p {
+  margin: 6px 0;
+}
+.terrain-profile {
+  margin: 8px 0;
+}
+.terrain-profile svg {
+  display: block;
+  width: 100%;
+  height: 110px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+.terrain-ground {
+  fill: #5c6b52;
+}
+.terrain-water {
+  fill: #5598e7;
+}
+.terrain-cruise {
+  stroke: #f2b544;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+.terrain-ceiling {
+  stroke: #e5735c;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.terrain-profile figcaption {
+  margin-top: 4px;
+}
+.key {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  vertical-align: middle;
+  border-top: 2px dashed #f2b544;
+}
+.key-ceiling {
+  border-top: 2px solid #e5735c;
+}
+.nav-log-scroll {
+  overflow-x: auto;
+}
+.nav-log {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.nav-log th,
+.nav-log td {
+  padding: 3px 8px 3px 0;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.nav-log th:first-child,
+.nav-log td:first-child {
+  text-align: left;
+  white-space: normal;
+}
+.nav-log th {
+  color: var(--muted);
+  font-weight: normal;
+}
+.nav-log-vor td:first-child {
+  color: #7fc9d9;
+}
+.nav-log-arrival td {
+  font-weight: 600;
+}
+.arrival-runways {
+  width: auto;
+}
+.descent-toggle {
+  margin: 8px 0;
+}

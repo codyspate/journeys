@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DESCENT, NO_LIMITS, PERFORMANCE_PRESETS } from '../shared/journey'
+import { NO_LIMITS, PERFORMANCE_PRESETS } from '../shared/journey'
 import { AirportIndex, airportsFromRows, type AirportRow } from './airports'
 import { createJourney, editRoute } from './planner'
 
@@ -33,7 +33,7 @@ describe('the bundled airport list', () => {
 describe('airports with no runway on record', () => {
   const comanche = { ...PERFORMANCE_PRESETS[0], minRunwayFt: 0 }
   const journey = createJourney(
-    { name: '', originIdent: 'KSAN', destinationIdent: 'KBOS', performance: comanche, maxLegMinutes: 240, limits: NO_LIMITS, descent: DEFAULT_DESCENT },
+    { name: '', originIdent: 'KSAN', destinationIdent: 'KBOS', performance: comanche, maxLegMinutes: 240, limits: NO_LIMITS },
     index,
     'j',
     0

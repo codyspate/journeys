@@ -40,7 +40,9 @@ export class AirframeDatabase implements AirframeStore {
       );
       CREATE INDEX IF NOT EXISTS airframe_saves_by_key ON airframe_saves (key, saved_at);
     `)
-    this.cachedSettings = { ...DEFAULT_SETTINGS, ...this.readSetting<Partial<Settings>>(SETTINGS_ID) }
+    const stored = this.readSetting<Partial<Settings>>(SETTINGS_ID)
+    this.cachedSettings = { ...DEFAULT_SETTINGS, ...stored, descent: { ...DEFAULT_SETTINGS.descent, ...stored?.descent } }
+    this.hadDescentSetting = stored?.descent !== undefined
   }
 
   private readSetting<T>(id: string): T | null {
@@ -54,12 +56,19 @@ export class AirframeDatabase implements AirframeStore {
       .run(id, JSON.stringify(value))
   }
 
+  /** False until the descent pause has been saved app-wide; Journeys used to keep it themselves. */
+  readonly hadDescentSetting: boolean
+
   get settings(): Settings {
     return this.cachedSettings
   }
 
   updateSettings(changes: Partial<Settings>): Settings {
-    this.cachedSettings = { ...this.cachedSettings, ...changes }
+    this.cachedSettings = {
+      ...this.cachedSettings,
+      ...changes,
+      descent: { ...this.cachedSettings.descent, ...changes.descent }
+    }
     this.writeSetting(SETTINGS_ID, this.cachedSettings)
     return this.cachedSettings
   }

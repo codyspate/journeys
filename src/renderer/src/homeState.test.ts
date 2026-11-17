@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AirframeRecord, LiveSim } from '../../shared/airframe'
-import { DEFAULT_DESCENT, type Journey, type Leg, NO_LIMITS, type Stop } from '../../shared/journey'
+import { type Journey, type Leg, NO_LIMITS, type Stop } from '../../shared/journey'
 import { aircraftLabels, currentJourney, progressOf, readiness } from './homeState'
 
 const stop = (ident: string, lat: number, lon: number): Stop => ({ ident, name: ident, lat, lon })
@@ -38,7 +38,6 @@ function journey(id: string, lastOpenedAt: number, legs: Leg[], status: Journey[
     performance: PERFORMANCE,
     maxLegMinutes: 180,
     limits: NO_LIMITS,
-    descent: DEFAULT_DESCENT,
     legs
   }
 }

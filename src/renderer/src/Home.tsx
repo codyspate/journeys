@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AirframeRecord, LiveSim } from '../../shared/airframe'
-import { type Journey, type Place, PLACE_KINDS, type PlaceKind } from '../../shared/journey'
+import { type DescentSettings, type Journey, type Place, PLACE_KINDS, type PlaceKind } from '../../shared/journey'
 import type { LogbookFlight } from '../../shared/logbook'
 import type { RestoreReport } from '../../shared/types'
 import { errorText } from './errors'
@@ -8,6 +8,8 @@ import { aircraftLabels, currentJourney, hoursMinutes, progressOf, type Readines
 import { AirportInput, type JourneyRequest } from './Journeys'
 import { LiveFlightMap } from './LiveFlightMap'
 import { feet, legNotes } from './legNotes'
+import { Kneeboard } from './Kneeboard'
+import { VorRouteList } from './VorRouteList'
 import { restoreSummary } from './RestoreResult'
 
 const REFRESH_MS = 3000
@@ -147,14 +149,14 @@ function NextLeg({ journey, live, airframes, labels, onOpen }: {
           </span>
         )}
       </div>
+      <VorRouteList leg={leg} />
       {legNotes(leg, journey.limits).map((note) => (
         <p key={note} className="note">
           {note}
         </p>
       ))}
-      {journey.descent.pauseBeforeTod && (
-        <p className="muted">Journeys will pause the sim {journey.descent.minutesBefore} min before top of descent into {leg.to.ident}.</p>
-      )}
+      <DescentToggle to={leg.to.ident} flying={live.flightId !== null} />
+      <Kneeboard journeyId={journey.id} leg={leg} limits={journey.limits} />
       <ReadinessLine
         state={readiness(leg, live, airframes)}
         start={leg.from.ident}
@@ -169,6 +171,36 @@ function NextLeg({ journey, live, airframes, labels, onOpen }: {
         Open Journey
       </button>
     </article>
+  )
+}
+
+/**
+ * The top-of-descent pause. During a flight it's a switch right here; otherwise it just says whether it's on.
+ * It's one app-wide setting, so it stays as it was left across restarts.
+ */
+function DescentToggle({ to, flying }: { to: string; flying: boolean }) {
+  const [descent, setDescent] = useState<DescentSettings | null>(null)
+  useEffect(() => {
+    void window.journeys.getSettings().then((settings) => setDescent(settings.descent ?? null))
+  }, [flying])
+  if (!descent) return null
+  if (!flying) {
+    return descent.pauseBeforeTod ? (
+      <p className="muted">Journeys will pause the sim {descent.minutesBefore} min before top of descent into {to}.</p>
+    ) : null
+  }
+  return (
+    <label className="checkbox descent-toggle">
+      <input
+        type="checkbox"
+        checked={descent.pauseBeforeTod}
+        onChange={async (e) => {
+          const settings = await window.journeys.updateSettings({ descent: { ...descent, pauseBeforeTod: e.target.checked } })
+          setDescent(settings.descent)
+        }}
+      />
+      Pause the sim {descent.minutesBefore} min before top of descent into {to}
+    </label>
   )
 }
 

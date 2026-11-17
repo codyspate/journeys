@@ -2,8 +2,9 @@ import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import { type GeoJSONSource, Map as MapLibreMap, NavigationControl } from 'maplibre-gl'
 import { useEffect, useRef, useState } from 'react'
 import type { LiveSim } from '../../shared/airframe'
-import type { Stop } from '../../shared/journey'
+import type { Stop, VorFix } from '../../shared/journey'
 import { isRealPosition } from '../../shared/logbook'
+import { unwrapLongitudes } from './mapData'
 import { OUTLINE, STYLE_URL } from './mapSetup'
 
 const POLL_MS = 1000
@@ -50,7 +51,7 @@ function distanceNm(a: { lat: number; lon: number }, b: { lat: number; lon: numb
  * The aircraft where it is right now, the trail it has flown this flight and the leg it's flying,
  * updated every second. The view follows the aircraft until the player pans away.
  */
-export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop } | null }) {
+export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop; vorRoute?: VorFix[] | null } | null }) {
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const trail = useRef<Coordinates[]>([])
@@ -145,9 +146,10 @@ export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop } | null })
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready) return
-    ;(map.getSource('live-leg') as GeoJSONSource).setData(
-      line(leg ? [[leg.from.lon, leg.from.lat], [leg.to.lon, leg.to.lat]] : [])
-    )
+    // Through its VORs, when the Journey plans radio navigation routes.
+    const points = leg ? [leg.from, ...(leg.vorRoute ?? []), leg.to] : []
+    const lons = unwrapLongitudes(points.map((p) => p.lon))
+    ;(map.getSource('live-leg') as GeoJSONSource).setData(line(points.map((p, i) => [lons[i], p.lat])))
   }, [leg, ready])
 
   useEffect(() => {

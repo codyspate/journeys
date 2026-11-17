@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DESCENT, type Journey, type Leg, NO_LIMITS, type Stop } from '../../shared/journey'
+import { type Journey, type Leg, NO_LIMITS, type Stop } from '../../shared/journey'
 import { journeyMapData, unwrapLongitudes } from './mapData'
+
 
 const stop = (ident: string, lat: number, lon: number): Stop => ({ ident, name: ident, lat, lon })
 
@@ -38,7 +39,6 @@ function journey(legs: Leg[], status: Journey['status'] = 'active'): Journey {
     performance: { name: 'x', cruiseKts: 100, burnGph: 10, usableFuelGal: 50, reserveMinutes: 45, minRunwayFt: 1000, needsHardSurface: false },
     maxLegMinutes: 120,
     limits: NO_LIMITS,
-    descent: DEFAULT_DESCENT,
     legs
   }
 }
@@ -85,6 +85,46 @@ describe('journeyMapData', () => {
     expect(journeyMapData(journey([leg(a, b, 'planned'), leg(b, c, 'planned')])).bounds).toEqual([
       [-120, 30],
       [-100, 40]
+    ])
+  })
+})
+
+describe('journeyMapData with VOR routes', () => {
+  const fix = (ident: string, lat: number, lon: number) => ({ ident, name: ident, type: 'VORTAC' as const, freqMhz: 114, lat, lon, magVarDeg: 0 })
+
+  it('draws planned legs through their VORs and marks each VOR once', () => {
+    const routed = { ...leg(a, b, 'planned'), vorRoute: [fix('V1', 32, -116), fix('V2', 34, -112)] }
+    const next = { ...leg(b, c, 'planned'), vorRoute: [fix('V2', 34, -112)] }
+    const data = journeyMapData(journey([routed, next]))
+    expect(data.lines.features[0].geometry.coordinates).toEqual([
+      [-120, 30],
+      [-116, 32],
+      [-112, 34],
+      [-110, 35]
+    ])
+    expect(data.vors.features.map((f) => f.properties)).toEqual([
+      { ident: 'V1', name: 'V1', frequency: '114.00' },
+      { ident: 'V2', name: 'V2', frequency: '114.00' }
+    ])
+  })
+
+  it('draws flown legs and legs without a route direct', () => {
+    const flown = { ...leg(a, b, 'flown'), vorRoute: [fix('V1', 32, -116)] }
+    const direct = { ...leg(b, c, 'planned'), vorRoute: null }
+    const data = journeyMapData(journey([flown, direct]))
+    expect(data.lines.features.map((f) => f.geometry.coordinates.length)).toEqual([2, 2])
+    expect(data.vors.features).toEqual([])
+  })
+
+  it('keeps a VOR across the date line next to its leg', () => {
+    const west = stop('W', 50, 175)
+    const east = stop('E', 52, -175)
+    const crossing = { ...leg(west, east, 'planned'), vorRoute: [fix('DL', 51, -179)] }
+    const data = journeyMapData({ ...journey([crossing]), origin: west, destination: east })
+    expect(data.lines.features[0].geometry.coordinates).toEqual([
+      [175, 50],
+      [181, 51],
+      [185, 52]
     ])
   })
 })

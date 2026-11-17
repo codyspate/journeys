@@ -10,6 +10,14 @@ const MIN_GS_KTS = 40
 /** Not worth pausing for a descent smaller than this. */
 const MIN_DESCENT_FT = 500
 
+/** Rejects descent timings the pause can't work with. */
+export function checkDescent(descent: DescentSettings): DescentSettings {
+  if (!(descent.minutesBefore > 0)) throw new Error('Minutes before top of descent needs to be more than zero.')
+  if (!(descent.arriveAboveFieldFt >= 0)) throw new Error("Height above the field can't be negative.")
+  if (!(descent.angleDeg >= 1 && descent.angleDeg <= 10)) throw new Error('Descent angle needs to be between 1° and 10°.')
+  return descent
+}
+
 export interface DescentTarget {
   ident: string
   name: string

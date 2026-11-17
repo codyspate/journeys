@@ -1,3 +1,4 @@
+import { DEFAULT_DESCENT } from '../shared/journey'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type AirframeRecord, airframeKey, type RestoreOffer, type Settings } from '../shared/airframe'
 import { BASE_CATALOG } from '../shared/catalog'
@@ -76,7 +77,7 @@ beforeEach(() => {
   port = new FakePort()
   store = new MemoryStore()
   offers = []
-  settings = { saveAircraftLocation: true, noTeleport: false, shareWithAssistants: false, showUnfinishedFlights: false }
+  settings = { saveAircraftLocation: true, noTeleport: false, shareWithAssistants: false, showUnfinishedFlights: false, descent: DEFAULT_DESCENT }
   tracker = new AirframeTracker(port, store, () => settings, (offer) => offers.push(offer), noWait)
   t = 1_000_000
 })

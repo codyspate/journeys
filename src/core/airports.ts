@@ -2,13 +2,15 @@ import type { Airport, AirportSize } from '../shared/journey'
 import { distanceNm } from './recorder'
 
 /** The last field, other codes for the same airport, is missing from lists built before it existed. */
-export type AirportRow = [string, string, number, number, number, number, string, string, number, number, number, string[]?]
+/** One runway in a row: [low end, high end, true heading of the low end or -1, length, hard]. */
+type RunwayRow = [string, string, number, number, number]
+export type AirportRow = [string, string, number, number, number, number, string, string, number, number, number, string[]?, RunwayRow[]?]
 
 const SIZES: AirportSize[] = ['small', 'medium', 'large']
 const SIZE_RANK: Record<AirportSize, number> = { small: 0, medium: 1, large: 2 }
 
 export function airportsFromRows(rows: AirportRow[]): Airport[] {
-  return rows.map(([ident, name, lat, lon, elevationFt, size, city, country, runwayFt, hard, scheduled, codes]) => ({
+  return rows.map(([ident, name, lat, lon, elevationFt, size, city, country, runwayFt, hard, scheduled, codes, runways]) => ({
     ident,
     name,
     lat,
@@ -20,7 +22,13 @@ export function airportsFromRows(rows: AirportRow[]): Airport[] {
     runwayFt,
     hardSurface: hard === 1,
     scheduled: scheduled === 1,
-    codes: codes ?? []
+    codes: codes ?? [],
+    runways: (runways ?? []).map(([low, high, heading, lengthFt, surface]) => ({
+      ends: [low, high] as [string, string],
+      headingTrue: heading >= 0 ? heading : null,
+      lengthFt,
+      hardSurface: surface === 1
+    }))
   }))
 }
 

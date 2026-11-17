@@ -98,6 +98,21 @@ export function VersionSettings() {
         </a>
         .
       </p>
+      <p className="muted legal">
+        Airport, runway and VOR data from{' '}
+        <a href="https://ourairports.com/data/" target="_blank" rel="noreferrer">
+          OurAirports
+        </a>{' '}
+        (public domain). Town names for checkpoints from{' '}
+        <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">
+          GeoNames
+        </a>
+        , licensed under{' '}
+        <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
+          CC BY 4.0
+        </a>
+        . Terrain from USGS GMTED2010 and Natural Earth (public domain). Maps by OpenFreeMap, © OpenStreetMap contributors.
+      </p>
     </div>
   )
 }

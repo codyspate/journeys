@@ -14,6 +14,17 @@ export interface Airport {
   scheduled: boolean
   /** Other codes the same airport goes by, such as its GPS or local code. */
   codes?: string[]
+  /** Open land runways, longest first. Missing from lists built before runways were kept. */
+  runways?: Runway[]
+}
+
+export interface Runway {
+  /** The two ends, such as "09" and "27". */
+  ends: [string, string]
+  /** True heading of the first end, or null if unknown. */
+  headingTrue: number | null
+  lengthFt: number
+  hardSurface: boolean
 }
 
 export type PlaceKind = 'home' | 'been' | 'want'
@@ -34,6 +45,35 @@ export interface Place {
   lon: number
   kind: PlaceKind
   note: string
+}
+
+/** How far a VOR can be received: terminal, low or high. */
+export type VorClass = 'T' | 'L' | 'H'
+
+export interface Vor {
+  ident: string
+  name: string
+  type: 'VOR' | 'VOR-DME' | 'VORTAC'
+  freqKhz: number
+  lat: number
+  lon: number
+  elevationFt: number
+  serviceClass: VorClass
+  country: string
+  /** Magnetic variation the station's radials are measured from, in degrees, east positive. */
+  magVarDeg: number
+}
+
+/** One station on a leg's radio route, with what's needed to tune it. */
+export interface VorFix {
+  ident: string
+  name: string
+  type: Vor['type']
+  freqMhz: number
+  lat: number
+  lon: number
+  /** East positive. Magnetic = true − variation. */
+  magVarDeg: number
 }
 
 export interface Stop {
@@ -71,6 +111,11 @@ export interface RouteLimits {
   terrainClearanceFt: number
   maxAirportElevationFt: number | null
   maxWaterNm: number | null
+  /**
+   * Radio navigation: each leg is planned as a chain of VORs, and only stops reachable that way are chosen.
+   * The routed distance, not the straight line, has to fit the longest leg.
+   */
+  vorRoutes: boolean
 }
 
 export const NO_LIMITS: RouteLimits = {
@@ -79,10 +124,11 @@ export const NO_LIMITS: RouteLimits = {
   maxAltitudeFt: null,
   terrainClearanceFt: 1000,
   maxAirportElevationFt: null,
-  maxWaterNm: null
+  maxWaterNm: null,
+  vorRoutes: false
 }
 
-/** Optional pause before top of descent, so there's time to set up the arrival. */
+/** The optional pause before top of descent, an app-wide setting, so there's time to set up the arrival. */
 export interface DescentSettings {
   pauseBeforeTod: boolean
   minutesBefore: number
@@ -109,7 +155,6 @@ export interface JourneySettings {
   performance: Performance
   maxLegMinutes: number
   limits: RouteLimits
-  descent: DescentSettings
 }
 
 export interface Leg {
@@ -134,6 +179,11 @@ export interface Leg {
   overWater?: boolean
   /** Shorter than your shortest leg. Informational only. */
   belowMinimum?: boolean
+  /**
+   * With radio navigation on, the VORs to fly through in order. null means no VOR route fits your limits,
+   * so the leg is shown direct. Missing when radio navigation is off.
+   */
+  vorRoute?: VorFix[] | null
   /** The arrival is a stop the player chose. */
   pinned: boolean
   confidence: 'firm' | 'tentative'
@@ -156,7 +206,6 @@ export interface Journey {
   performance: Performance
   maxLegMinutes: number
   limits: RouteLimits
-  descent: DescentSettings
   legs: Leg[]
 }
 
@@ -167,7 +216,6 @@ export interface CreateJourneyInput {
   performance: Performance
   maxLegMinutes: number
   limits?: RouteLimits
-  descent?: DescentSettings
 }
 
 export type RouteEdit =

@@ -2,7 +2,6 @@ import { airMinutes, type LogbookFlight } from '../shared/logbook'
 import {
   type Airport,
   type CreateJourneyInput,
-  DEFAULT_DESCENT,
   type Journey,
   type JourneySettings,
   type Leg,
@@ -12,11 +11,13 @@ import {
   type ReachOptions,
   type RouteEdit,
   type RouteLimits,
-  type Stop
+  type Stop,
+  type Vor
 } from '../shared/journey'
 import type { AirportIndex } from './airports'
 import { distanceNm } from './recorder'
 import type { Terrain } from './terrain'
+import { VorRouter, type VorRoute } from './vor'
 
 const EARTH_NM = 3440.065
 const SAME_PLACE_NM = 5
@@ -38,11 +39,10 @@ export function maxLegNm({ performance, maxLegMinutes, limits }: JourneySettings
   return Math.min(rangeNm(performance), (maxLegMinutes / 60) * performance.cruiseKts, limits.maxLegNm ?? Infinity)
 }
 
-export const settingsOf = ({ performance, maxLegMinutes, limits, descent }: Journey): JourneySettings => ({
+export const settingsOf = ({ performance, maxLegMinutes, limits }: Journey): JourneySettings => ({
   performance,
   maxLegMinutes,
-  limits,
-  descent
+  limits
 })
 
 /** What terrain and water make of a direct leg, against the player's limits. */
@@ -116,7 +116,27 @@ const stopKey = (stop: Stop) => (stop.ident === 'OFF-FIELD' || stop.ident === 'H
 const corridorWidth =(legNm: number) => Math.max(50, Math.min(200, legNm * 0.25))
 
 /** Picks the fewest, evenest, best-quality stops between two points. Always returns a route. */
-export function planStops(from: Stop, to: Stop, airports: Airport[], settings: JourneySettings, terrain?: Terrain): Stop[] {
+export function planStops(from: Stop, to: Stop, airports: Airport[], settings: JourneySettings, terrain?: Terrain, vors?: Vor[]): Stop[] {
+  return planSegment(from, to, airports, settings, terrain, vors).stops
+}
+
+/** VORs that could help between two points: near the line, allowing for how far they reach. */
+function vorsNear(from: Stop, to: Stop, vors: Vor[], widthNm: number): Vor[] {
+  const total = distanceNm(from.lat, from.lon, to.lat, to.lon)
+  const margin = widthNm + 40
+  return vors.filter((vor) => {
+    const { alongNm, crossNm } = trackPosition(from, to, vor)
+    return crossNm <= margin && alongNm > -margin && alongNm < total + margin
+  })
+}
+
+interface Segment {
+  stops: Stop[]
+  /** One per leg with radio navigation on, in order; undefined when it's off. */
+  routes?: (VorRoute | null)[]
+}
+
+function planSegment(from: Stop, to: Stop, airports: Airport[], settings: JourneySettings, terrain?: Terrain, vors?: Vor[]): Segment {
   const { performance, limits } = settings
   const limit = maxLegNm(settings)
   const total = distanceNm(from.lat, from.lon, to.lat, to.lon)
@@ -151,9 +171,25 @@ export function planStops(from: Stop, to: Stop, airports: Airport[], settings: J
     const over = Math.max(0, highestFt - giveUp.aboveFt) / FEET_PER_STOP + Math.max(0, longestWaterNm - giveUp.waterNm) / WATER_NM_PER_STOP
     return remember(cache.excess, key, over)
   }
-  if (total <= limit && (!checksTerrain || !breaksLimits(from, to))) return []
-
   const width = corridorWidth(limit)
+  const router =
+    limits.vorRoutes && vors
+      ? new VorRouter(
+          vorsNear(from, to, vors, width),
+          // A little past the longest leg, so a stop the player chose still gets a route to show.
+          limit * 1.5,
+          (a, b) => !checksTerrain || !breaksLimits(a, b),
+          stopKey
+        )
+      : null
+  const withRoutes = (stops: Stop[]): Segment =>
+    router ? { stops, routes: [from, ...stops].map((stop, i) => router.route(stop, [...stops, to][i])) } : { stops }
+
+  if (router) {
+    const direct = router.route(from, to)
+    if (direct && direct.distanceNm <= limit) return { stops: [], routes: [direct] }
+  } else if (total <= limit && (!checksTerrain || !breaksLimits(from, to))) return { stops: [] }
+
   const candidates = airports
     .filter((a) => a.ident !== from.ident && a.ident !== to.ident && usable(a, performance, limits))
     .map((airport) => ({ airport, ...trackPosition(from, to, airport) }))
@@ -175,6 +211,26 @@ export function planStops(from: Stop, to: Stop, airports: Airport[], settings: J
     for (let j = i - 1; j >= 0; j--) {
       if (j < i - 1 && nodes[i].along - nodes[j].along > limit * SEARCH_WINDOW) break
       const d = distanceNm(nodes[j].stop.lat, nodes[j].stop.lon, nodes[i].stop.lat, nodes[i].stop.lon)
+      if (router) {
+        // A radio route is never shorter than the straight line, so most hops are ruled out before routing.
+        // A leg with no radio route costs far more than an extra stop, but is still planned like any other,
+        // so where there are no VORs the plan falls back to sensible direct legs.
+        const legCost = (nm: number) => {
+          let edge = nm <= limit ? 1 + 0.3 * (1 - nm / limit) ** 2 + nodes[i].quality * 0.2 : GAP_COST + nm
+          if (limits.minLegNm !== null && nm < limits.minLegNm && !(j === 0 && i === last)) edge += 0.5 + 2 * (1 - nm / limits.minLegNm)
+          return edge
+        }
+        let edge = 2 * GAP_COST + legCost(d)
+        if (d <= limit && cost[j] + 1 + nodes[i].quality * 0.2 < cost[i]) {
+          const routed = router.route(nodes[j].stop, nodes[i].stop)
+          if (routed && routed.distanceNm <= limit) edge = legCost(routed.distanceNm)
+        }
+        if (cost[j] + edge < cost[i]) {
+          cost[i] = cost[j] + edge
+          previous[i] = j
+        }
+        continue
+      }
       // An over-long hop is only chosen when geography leaves nothing else, such as an ocean.
       let edge = d <= limit ? 1 + 0.3 * (1 - d / limit) ** 2 + nodes[i].quality * 0.2 : GAP_COST + d
       if (limits.minLegNm !== null && d < limits.minLegNm && !(j === 0 && i === last)) edge += 0.5 + 2 * (1 - d / limits.minLegNm)
@@ -196,12 +252,33 @@ export function planStops(from: Stop, to: Stop, airports: Airport[], settings: J
 
   const stops: Stop[] = []
   for (let at = previous[nodes.length - 1]; at > 0; at = previous[at]) stops.unshift(nodes[at].stop)
-  return stops
+  return withRoutes(stops)
 }
 
-function buildLeg(from: Stop, to: Stop, settings: JourneySettings, terrain: Terrain | undefined, pinned: boolean, index: number): Leg {
+/** Terrain and water along every stretch of a radio route, taken together. */
+function routeConditions(from: Stop, to: Stop, route: VorRoute, settings: JourneySettings, terrain: Terrain | undefined) {
+  const points: Stop[] = [from, ...route.fixes.map((f) => ({ ident: f.ident, name: f.name, lat: f.lat, lon: f.lon })), to]
+  const parts = points.slice(1).map((point, i) => legConditions(points[i], point, settings, terrain))
+  const most = (values: (number | null)[]) => (values.some((v) => v === null) ? null : Math.max(...(values as number[])))
+  return {
+    highestTerrainFt: most(parts.map((p) => p.highestTerrainFt)),
+    longestWaterNm: most(parts.map((p) => p.longestWaterNm)),
+    aboveCeiling: parts.some((p) => p.aboveCeiling),
+    overWater: parts.some((p) => p.overWater)
+  }
+}
+
+function buildLeg(
+  from: Stop,
+  to: Stop,
+  settings: JourneySettings,
+  terrain: Terrain | undefined,
+  pinned: boolean,
+  index: number,
+  route?: VorRoute | null
+): Leg {
   const { performance, maxLegMinutes, limits } = settings
-  const distance = distanceNm(from.lat, from.lon, to.lat, to.lon)
+  const distance = route ? route.distanceNm : distanceNm(from.lat, from.lon, to.lat, to.lon)
   const minutes = (distance / performance.cruiseKts) * 60
   return {
     id: `planned-${index}-${from.ident}-${to.ident}`,
@@ -214,7 +291,8 @@ function buildLeg(from: Stop, to: Stop, settings: JourneySettings, terrain: Terr
     beyondRange: distance > rangeNm(performance) + 0.5,
     beyondSession: minutes > maxLegMinutes + 0.5 || (limits.maxLegNm !== null && distance > limits.maxLegNm + 0.5),
     belowMinimum: limits.minLegNm !== null && distance < limits.minLegNm - 0.5,
-    ...legConditions(from, to, settings, terrain),
+    ...(route ? routeConditions(from, to, route, settings, terrain) : legConditions(from, to, settings, terrain)),
+    ...(route !== undefined && { vorRoute: route ? route.fixes : null }),
     pinned,
     confidence: index < FIRM_LEGS ? 'firm' : 'tentative',
     flightId: null,
@@ -227,7 +305,7 @@ export function currentStop(journey: Journey): Stop {
 }
 
 /** Replaces the future with a fresh plan. Flown legs are never touched. */
-export function reflow(journey: Journey, airports: Airport[], terrain?: Terrain): Journey {
+export function reflow(journey: Journey, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
   const flown = journey.legs.filter((leg) => leg.status === 'flown')
   const start = currentStop(journey)
   if (start.ident === journey.destination.ident) return { ...journey, legs: flown, status: 'complete', via: [] }
@@ -238,11 +316,12 @@ export function reflow(journey: Journey, airports: Airport[], terrain?: Terrain)
   const planned: Leg[] = []
   let from = start
   for (const target of targets) {
-    const stops = [...planStops(from, target, choices, settings, terrain), target]
-    for (const stop of stops) {
-      planned.push(buildLeg(from, stop, settings, terrain, stop === target, planned.length))
+    const segment = planSegment(from, target, choices, settings, terrain, vors)
+    const stops = [...segment.stops, target]
+    stops.forEach((stop, i) => {
+      planned.push(buildLeg(from, stop, settings, terrain, stop === target, planned.length, segment.routes?.[i]))
       from = stop
-    }
+    })
   }
   return { ...journey, status: 'active', legs: [...flown, ...planned] }
 }
@@ -280,21 +359,16 @@ export function checkSettings(settings: JourneySettings): JourneySettings {
   if (limits.minLegNm !== null && limits.minLegNm >= maxLegNm(settings)) {
     throw new Error('Shortest leg needs to be less than the longest leg this aircraft can fly.')
   }
-  const { descent } = settings
-  positive(descent.minutesBefore, 'Minutes before top of descent')
-  notNegative(descent.arriveAboveFieldFt, 'Height above the field')
-  if (!(descent.angleDeg >= 1 && descent.angleDeg <= 10)) throw new Error('Descent angle needs to be between 1° and 10°.')
   return settings
 }
 
-export function createJourney(input: CreateJourneyInput, index: AirportIndex, id: string, now: number, terrain?: Terrain): Journey {
+export function createJourney(input: CreateJourneyInput, index: AirportIndex, id: string, now: number, terrain?: Terrain, vors?: Vor[]): Journey {
   const origin = toStop(requireAirport(index, input.originIdent))
   const destination = toStop(requireAirport(index, input.destinationIdent))
   const settings = checkSettings({
     performance: input.performance,
     maxLegMinutes: input.maxLegMinutes,
-    limits: input.limits ?? NO_LIMITS,
-    descent: input.descent ?? DEFAULT_DESCENT
+    limits: input.limits ?? NO_LIMITS
   })
   return reflow(
     {
@@ -311,19 +385,20 @@ export function createJourney(input: CreateJourneyInput, index: AirportIndex, id
       legs: []
     },
     index.all,
-    terrain
+    terrain,
+    vors
   )
 }
 
 /** Changes the aircraft numbers or route limits, and re-plans what hasn't been flown. */
-export function updateSettings(journey: Journey, settings: JourneySettings, airports: Airport[], terrain?: Terrain): Journey {
-  return reflow({ ...journey, ...checkSettings(settings) }, airports, terrain)
+export function updateSettings(journey: Journey, settings: JourneySettings, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
+  return reflow({ ...journey, ...checkSettings(settings) }, airports, terrain, vors)
 }
 
 const between = (a: Stop, b: Stop) => distanceNm(a.lat, a.lon, b.lat, b.lon)
 
 /** Adds a chosen stop where it costs the least extra distance, keeping the player's order. */
-export function addVia(journey: Journey, stop: Stop, airports: Airport[], terrain?: Terrain): Journey {
+export function addVia(journey: Journey, stop: Stop, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
   const via = journey.via.filter((v) => v.ident !== stop.ident)
   const points = [currentStop(journey), ...via, journey.destination]
   let position = 0
@@ -336,38 +411,38 @@ export function addVia(journey: Journey, stop: Stop, airports: Airport[], terrai
     }
   }
   via.splice(position, 0, stop)
-  return reflow({ ...journey, via, avoid: journey.avoid.filter((ident) => ident !== stop.ident) }, airports, terrain)
+  return reflow({ ...journey, via, avoid: journey.avoid.filter((ident) => ident !== stop.ident) }, airports, terrain, vors)
 }
 
 /** Takes a stop off the route, and keeps the planner from choosing it again. */
-export function removeVia(journey: Journey, ident: string, airports: Airport[], terrain?: Terrain): Journey {
+export function removeVia(journey: Journey, ident: string, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
   const via = journey.via.filter((v) => v.ident !== ident)
-  return reflow({ ...journey, via, avoid: [...new Set([...journey.avoid, ident])] }, airports, terrain)
+  return reflow({ ...journey, via, avoid: [...new Set([...journey.avoid, ident])] }, airports, terrain, vors)
 }
 
-function replaceStop(journey: Journey, ident: string, stop: Stop, airports: Airport[], terrain?: Terrain): Journey {
+function replaceStop(journey: Journey, ident: string, stop: Stop, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
   const isOtherChoice = (s: Stop) => s.ident !== stop.ident && journey.via.some((v) => v.ident === s.ident)
   const via = journey.legs
     .filter((leg) => leg.status === 'planned')
     .flatMap((leg) => (leg.to.ident === ident ? [stop] : isOtherChoice(leg.to) ? [leg.to] : []))
   const avoid = [...new Set([...journey.avoid.filter((a) => a !== stop.ident), ident])]
-  return reflow({ ...journey, via, avoid }, airports, terrain)
+  return reflow({ ...journey, via, avoid }, airports, terrain, vors)
 }
 
-function moveStop(journey: Journey, ident: string, offset: -1 | 1, airports: Airport[], terrain?: Terrain): Journey {
+function moveStop(journey: Journey, ident: string, offset: -1 | 1, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
   const from = journey.via.findIndex((v) => v.ident === ident)
   const to = from + offset
   if (from < 0 || to < 0 || to >= journey.via.length) return journey
   const via = [...journey.via]
   ;[via[from], via[to]] = [via[to], via[from]]
-  return reflow({ ...journey, via }, airports, terrain)
+  return reflow({ ...journey, via }, airports, terrain, vors)
 }
 
 /**
  * Moves one stop to a different airport. Every stop before it is kept exactly where it is.
  * After it, 'keep' keeps every stop, and 'replan' plans everything from the new stop onwards afresh.
  */
-function dragStop(journey: Journey, ident: string, stop: Stop, rest: 'keep' | 'replan', airports: Airport[], terrain?: Terrain): Journey {
+function dragStop(journey: Journey, ident: string, stop: Stop, rest: 'keep' | 'replan', airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
   const ahead = journey.legs.filter((leg) => leg.status === 'planned').map((leg) => leg.to)
   const at = ahead.findIndex((s) => s.ident === ident)
   if (at < 0 || ident === journey.destination.ident) throw new Error(`${ident} isn't a stop you still have to fly to.`)
@@ -376,13 +451,13 @@ function dragStop(journey: Journey, ident: string, stop: Stop, rest: 'keep' | 'r
   const later = rest === 'keep' ? ahead.slice(at + 1, -1) : []
   const via = [...ahead.slice(0, at), stop, ...later]
   const avoid = [...new Set([...journey.avoid.filter((a) => a !== stop.ident), ident])]
-  return reflow({ ...journey, via, avoid }, airports, terrain)
+  return reflow({ ...journey, via, avoid }, airports, terrain, vors)
 }
 
-function withEndpoints(journey: Journey, origin: Stop, destination: Stop, airports: Airport[], terrain?: Terrain): Journey {
+function withEndpoints(journey: Journey, origin: Stop, destination: Stop, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
   const name = journey.name === `${journey.origin.ident} to ${journey.destination.ident}` ? `${origin.ident} to ${destination.ident}` : journey.name
   const via = journey.via.filter((v) => v.ident !== origin.ident && v.ident !== destination.ident)
-  return reflow({ ...journey, name, origin, destination, via }, airports, terrain)
+  return reflow({ ...journey, name, origin, destination, via }, airports, terrain, vors)
 }
 
 function requireNewStop(journey: Journey, stop: Stop): void {
@@ -391,35 +466,35 @@ function requireNewStop(journey: Journey, stop: Stop): void {
 }
 
 /** Applies one change the player made to the part of the route they haven't flown. */
-export function editRoute(journey: Journey, edit: RouteEdit, index: AirportIndex, terrain?: Terrain): Journey {
+export function editRoute(journey: Journey, edit: RouteEdit, index: AirportIndex, terrain?: Terrain, vors?: Vor[]): Journey {
   const airports = index.all
-  if (edit.kind === 'reset') return reflow({ ...journey, via: [], avoid: [] }, airports, terrain)
-  if (edit.kind === 'remove') return removeVia(journey, edit.ident, airports, terrain)
-  if (edit.kind === 'move') return moveStop(journey, edit.ident, edit.offset, airports, terrain)
+  if (edit.kind === 'reset') return reflow({ ...journey, via: [], avoid: [] }, airports, terrain, vors)
+  if (edit.kind === 'remove') return removeVia(journey, edit.ident, airports, terrain, vors)
+  if (edit.kind === 'move') return moveStop(journey, edit.ident, edit.offset, airports, terrain, vors)
 
   const stop = toStop(requireAirport(index, edit.kind === 'replace' || edit.kind === 'drag' ? edit.withIdent : edit.ident))
   switch (edit.kind) {
     case 'add':
       requireNewStop(journey, stop)
-      return addVia(journey, stop, airports, terrain)
+      return addVia(journey, stop, airports, terrain, vors)
     case 'replace':
       requireNewStop(journey, stop)
-      return replaceStop(journey, edit.ident, stop, airports, terrain)
+      return replaceStop(journey, edit.ident, stop, airports, terrain, vors)
     case 'drag':
       requireNewStop(journey, stop)
-      return dragStop(journey, edit.ident, stop, edit.rest, airports, terrain)
+      return dragStop(journey, edit.ident, stop, edit.rest, airports, terrain, vors)
     case 'origin':
       if (journey.legs.some((leg) => leg.status === 'flown')) throw new Error('You have already left the first airport.')
       if (stop.ident === journey.destination.ident) throw new Error(`${stop.ident} is already your destination.`)
-      return withEndpoints(journey, stop, journey.destination, airports, terrain)
+      return withEndpoints(journey, stop, journey.destination, airports, terrain, vors)
     case 'destination':
       if (stop.ident === currentStop(journey).ident) throw new Error(`You're already at ${stop.ident}.`)
-      return withEndpoints(journey, journey.origin, stop, airports, terrain)
+      return withEndpoints(journey, journey.origin, stop, airports, terrain, vors)
   }
 }
 
 /** Records a finished flight on the Journey, and re-plans from wherever it ended. */
-export function applyFlight(journey: Journey, flight: LogbookFlight, index: AirportIndex, terrain?: Terrain): Journey | null {
+export function applyFlight(journey: Journey, flight: LogbookFlight, index: AirportIndex, terrain?: Terrain, vors?: Vor[]): Journey | null {
   if (journey.status !== 'active' || flight.status !== 'complete' || !flight.destination) return null
   if (journey.legs.some((leg) => leg.flightId === flight.id)) return null
 
@@ -450,7 +525,7 @@ export function applyFlight(journey: Journey, flight: LogbookFlight, index: Airp
   const legs = [...journey.legs.filter((leg) => leg.status === 'flown'), flown]
   const reached = journey.via.findIndex((v) => v.ident === to.ident)
   const via = journey.via.slice(reached + 1)
-  return reflow({ ...journey, legs, via }, index.all, terrain)
+  return reflow({ ...journey, legs, via }, index.all, terrain, vors)
 }
 
 export interface ReachInput {

@@ -3,12 +3,12 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
 import { AirframeTracker } from '../core/airframes'
-import { DescentWatcher } from '../core/descent'
+import { checkDescent, DescentWatcher } from '../core/descent'
 import { FlightRecorder, hasPosition } from '../core/recorder'
 import { DEFAULT_TIMING } from '../core/restore'
 import { awayFromHome, FlightGate, type Home } from '../core/tracking'
 import { type LiveSim, type RestoreOffer, type Settings, splitAirframeKey, type UntrackedFlight } from '../shared/airframe'
-import type { CreateJourneyInput, JourneySettings, PlaceKind, RouteEdit } from '../shared/journey'
+import { type Airport, type CreateJourneyInput, DEFAULT_DESCENT, type DescentSettings, type JourneySettings, type PlaceKind, type RouteEdit } from '../shared/journey'
 import {
   type AircraftFlight,
   type Atlas,
@@ -122,10 +122,20 @@ void app.whenReady().then(() => {
   const journeys = new JourneyService(
     join(app.getPath('userData'), 'logbook.db'),
     join(app.getAppPath(), 'resources/airports.json'),
-    join(app.getAppPath(), 'resources/terrain.bin.gz')
+    join(app.getAppPath(), 'resources/terrain.bin.gz'),
+    join(app.getAppPath(), 'resources/navaids.json'),
+    join(app.getAppPath(), 'resources/places.json')
   )
   ipcMain.handle('airports:search', (_event, query: string) => journeys.airports.search(query))
-  ipcMain.handle('airports:all', () => journeys.airports.all)
+  // The map only needs where airports are and what they're like, not every runway.
+  let airportList: Omit<Airport, 'runways'>[] | null = null
+  ipcMain.handle('airports:all', () => (airportList ??= journeys.airports.all.map(({ runways: _runways, ...airport }) => airport)))
+  ipcMain.handle('journeys:brief', (_event, journeyId: string, legId: string) => {
+    // The wind where the aircraft is now, if the sim is running; a rough guide for any leg.
+    const sample = sim.status.connected && lastSample && Date.now() - lastSample.t < 60_000 ? lastSample : null
+    const wind = sample ? { fromTrue: sample.windDirTrue, kts: sample.windKts } : null
+    return journeys.brief(journeyId, legId, wind)
+  })
   ipcMain.handle('journeys:list', () => journeys.list())
   ipcMain.handle('journeys:create', (_event, input: CreateJourneyInput) => journeys.create(input))
   ipcMain.handle('journeys:open', (_event, id: string) => journeys.open(id))
@@ -141,6 +151,11 @@ void app.whenReady().then(() => {
   ipcMain.handle('places:remove', (_event, id: string) => places.remove(id))
 
   const airframes = new AirframeDatabase(join(app.getPath('userData'), 'logbook.db'), journeys.airports)
+  // The descent pause used to be kept per Journey. Carry over the one from the Journey being flown.
+  if (!airframes.hadDescentSetting) {
+    const kept = journeys.list().find((journey) => journey.status === 'active') as { descent?: Partial<DescentSettings> } | undefined
+    airframes.updateSettings({ descent: { ...DEFAULT_DESCENT, ...kept?.descent } })
+  }
 
   /** Where an aircraft really is: its parked save or where its last logged flight landed, whichever is newer. */
   const homeOf = (key: string): Home | null => {
@@ -270,6 +285,7 @@ void app.whenReady().then(() => {
     .catch((error) => console.error('Could not import Restore lab saves:', error))
   ipcMain.handle('settings:get', () => airframes.settings)
   ipcMain.handle('settings:update', async (_event, changes: Partial<Settings>) => {
+    if (changes.descent) checkDescent({ ...airframes.settings.descent, ...changes.descent })
     const settings = airframes.updateSettings(changes)
     if ('shareWithAssistants' in changes) await syncAssistantEndpoint()
     return settings
@@ -337,7 +353,7 @@ void app.whenReady().then(() => {
     lastSample = sample
     tracker.ingest(sample)
     const next = sample.onGround ? null : journeys.descentTarget()
-    const tod = descent.ingest(sample, next?.target ?? null, next?.settings ?? null)
+    const tod = descent.ingest(sample, next?.target ?? null, airframes.settings.descent)
     if (tod) {
       try {
         sim.fireEvent('PAUSE_ON')

@@ -1,7 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import {
   type Airport,
-  DEFAULT_DESCENT,
   type Journey,
   type JourneySettings,
   type Leg,
@@ -15,6 +14,8 @@ import type { FlightJournal } from '../../shared/logbook'
 import { errorText } from './errors'
 import { JourneyMap } from './JourneyMap'
 import { feet, legNotes, MENTION_WATER_NM } from './legNotes'
+import { Kneeboard } from './Kneeboard'
+import { VorRouteList } from './VorRouteList'
 import { RouteSettings, SettingsFields } from './RouteSettings'
 import { SaveControls } from './SaveControls'
 
@@ -64,8 +65,7 @@ function NewJourney({ onCreated, from = '', to = '' }: { onCreated: (journey: Jo
   const [settings, setSettings] = useState<JourneySettings>({
     performance: PERFORMANCE_PRESETS[0],
     maxLegMinutes: 180,
-    limits: NO_LIMITS,
-    descent: DEFAULT_DESCENT
+    limits: NO_LIMITS
   })
   const [error, setError] = useState<string | null>(null)
 
@@ -204,7 +204,19 @@ function LegActions({ leg, editing }: { leg: Leg; editing: LegEditing }) {
   )
 }
 
-function LegRow({ leg, limits, editing, journal }: { leg: Leg; limits: RouteLimits; editing: LegEditing | null; journal?: FlightJournal }) {
+function LegRow({
+  leg,
+  journeyId,
+  limits,
+  editing,
+  journal
+}: {
+  leg: Leg
+  journeyId: string
+  limits: RouteLimits
+  editing: LegEditing | null
+  journal?: FlightJournal
+}) {
   const chosen = editing !== null && editing.chosenIndex >= 0
   return (
     <li className={`leg ${leg.status} ${leg.confidence}`}>
@@ -224,12 +236,14 @@ function LegRow({ leg, limits, editing, journal }: { leg: Leg; limits: RouteLimi
           {leg.status === 'flown' ? 'Flown' : chosen ? 'Your stop' : leg.confidence === 'firm' ? 'Planned' : 'Tentative'}
         </span>
       </div>
+      {leg.status === 'planned' && <VorRouteList leg={leg} />}
       {leg.status === 'planned' &&
         legNotes(leg, limits).map((note) => (
           <p key={note} className="note">
             {note}
           </p>
         ))}
+      {leg.status === 'planned' && <Kneeboard journeyId={journeyId} leg={leg} limits={limits} />}
       {journal?.note && <p className="leg-journal">“{journal.note}”</p>}
       {journal && journal.photoCount > 0 && (
         <p className="muted">
@@ -283,11 +297,11 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
   const settings = useMemo<JourneySettings | null>(
     () =>
       selected
-        ? { performance: selected.performance, maxLegMinutes: selected.maxLegMinutes, limits: selected.limits, descent: selected.descent }
+        ? { performance: selected.performance, maxLegMinutes: selected.maxLegMinutes, limits: selected.limits }
         : null,
     // Rebuilt only when the numbers change, so a draft survives unrelated updates such as a flight landing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected && JSON.stringify([selected.performance, selected.maxLegMinutes, selected.limits, selected.descent])]
+    [selected && JSON.stringify([selected.performance, selected.maxLegMinutes, selected.limits])]
   )
 
   const replace = (journey: Journey) =>
@@ -457,6 +471,7 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
                 <LegRow
                   key={leg.id}
                   leg={leg}
+                  journeyId={selected.id}
                   limits={selected.limits}
                   editing={legEditing(selected, leg)}
                   journal={leg.flightId ? journals[leg.flightId] : undefined}

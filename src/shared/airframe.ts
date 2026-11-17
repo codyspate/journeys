@@ -1,3 +1,4 @@
+import { DEFAULT_DESCENT, type DescentSettings } from './journey'
 import type { Snapshot } from './types'
 
 export interface ParkedLocation {
@@ -40,13 +41,16 @@ export interface Settings {
   shareWithAssistants: boolean
   /** Draw flights that ended without landing and parking on the Atlas and aircraft maps. */
   showUnfinishedFlights: boolean
+  /** The top-of-descent pause, for whichever Journey is being flown. Remembered across restarts. */
+  descent: DescentSettings
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   saveAircraftLocation: true,
   noTeleport: true,
   shareWithAssistants: false,
-  showUnfinishedFlights: false
+  showUnfinishedFlights: false,
+  descent: DEFAULT_DESCENT
 }
 
 /** What the sim is doing right now, for the Home screen. */

@@ -46,12 +46,28 @@ const [inputDir, output] = process.argv.slice(2)
 const airports = parseCsv(readFileSync(join(inputDir, 'airports.csv'), 'utf8'))
 const runways = parseCsv(readFileSync(join(inputDir, 'runways.csv'), 'utf8'))
 
+/** The runway number as a heading, for runways with no surveyed heading: 27 is about 270°. */
+const fromNumber = (ident) => {
+  const number = Number(/^(\d{1,2})/.exec(ident ?? '')?.[1])
+  return number >= 1 && number <= 36 ? number * 10 : null
+}
+
 const longest = new Map()
+const landRunways = new Map()
 for (const runway of runways) {
   const length = Number(runway.length_ft)
   if (runway.closed === '1' || !length || WATER.test(runway.surface)) continue
+  const hard = HARD.test(runway.surface)
   const best = longest.get(runway.airport_ident)
-  if (!best || length > best.length) longest.set(runway.airport_ident, { length, hard: HARD.test(runway.surface) })
+  if (!best || length > best.length) longest.set(runway.airport_ident, { length, hard })
+  // Each runway once, by its low end: [low end, high end, true heading of the low end or -1, length, hard].
+  const heading =
+    runway.le_heading_degT !== '' && Number.isFinite(Number(runway.le_heading_degT))
+      ? Math.round(Number(runway.le_heading_degT))
+      : (fromNumber(runway.le_ident) ?? (fromNumber(runway.he_ident) !== null ? (fromNumber(runway.he_ident) + 180) % 360 : -1))
+  const list = landRunways.get(runway.airport_ident) ?? []
+  list.push([runway.le_ident, runway.he_ident, heading, length, hard ? 1 : 0])
+  landRunways.set(runway.airport_ident, list)
 }
 
 const rows = []
@@ -76,7 +92,8 @@ for (const airport of airports) {
     runway?.length ?? 0,
     runway?.hard ? 1 : 0,
     airport.scheduled_service === 'yes' ? 1 : 0,
-    codes
+    codes,
+    (landRunways.get(airport.ident) ?? []).sort((a, b) => b[3] - a[3])
   ])
 }
 

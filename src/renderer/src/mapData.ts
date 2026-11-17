@@ -15,9 +15,18 @@ export interface StopProperties {
   index: number
 }
 
+/** A VOR on a planned leg's radio route. */
+export interface VorProperties {
+  ident: string
+  name: string
+  /** Ready to show, such as "114.00". */
+  frequency: string
+}
+
 export interface JourneyMapData {
   lines: FeatureCollection<LineString, { status: LineStatus }>
   stops: FeatureCollection<Point, StopProperties>
+  vors: FeatureCollection<Point, VorProperties>
   bounds: [[number, number], [number, number]]
 }
 
@@ -65,19 +74,39 @@ export function journeyMapData(journey: Journey): JourneyMapData {
   const longitudes = unwrapLongitudes(points.map((point) => point.lon))
   const flownCount = journey.legs.filter((leg) => leg.status === 'flown').length
 
-  const lines = journey.legs.map(
-    (leg, index): Feature<LineString, { status: LineStatus }> => ({
+  /** The same longitude, moved by whole turns to sit next to `near`, so lines don't wrap the long way. */
+  const beside = (lon: number, near: number) => lon + 360 * Math.round((near - lon) / 360)
+  const vors: Feature<Point, VorProperties>[] = []
+  const seenVors = new Set<string>()
+  const vorLons: number[] = []
+
+  const lines = journey.legs.map((leg, index): Feature<LineString, { status: LineStatus }> => {
+    // Planned legs with a radio route are drawn through their VORs.
+    const fixes = leg.status === 'planned' ? (leg.vorRoute ?? []) : []
+    const through: [number, number][] = []
+    let lon = longitudes[index]
+    for (const fix of fixes) {
+      lon = beside(fix.lon, lon)
+      through.push([lon, fix.lat])
+      vorLons.push(lon)
+      const key = `${fix.ident}@${fix.lat},${fix.lon}`
+      if (seenVors.has(key)) continue
+      seenVors.add(key)
+      vors.push({
+        type: 'Feature',
+        properties: { ident: fix.ident, name: fix.name, frequency: fix.freqMhz.toFixed(2) },
+        geometry: { type: 'Point', coordinates: [lon, fix.lat] }
+      })
+    }
+    return {
       type: 'Feature',
       properties: { status: leg.status === 'flown' ? 'flown' : leg.confidence },
       geometry: {
         type: 'LineString',
-        coordinates: [
-          [longitudes[index], points[index].lat],
-          [longitudes[index + 1], points[index + 1].lat]
-        ]
+        coordinates: [[longitudes[index], points[index].lat], ...through, [longitudes[index + 1], points[index + 1].lat]]
       }
-    })
-  )
+    }
+  })
 
   const active = journey.status === 'active'
   const last = points.length - 1
@@ -97,13 +126,15 @@ export function journeyMapData(journey: Journey): JourneyMapData {
     }
   })
 
-  const lats = points.map((point) => point.lat)
+  const lats = [...points.map((point) => point.lat), ...vors.map((vor) => vor.geometry.coordinates[1])]
+  const allLons = [...longitudes, ...vorLons]
   return {
     lines: { type: 'FeatureCollection', features: lines },
     stops: { type: 'FeatureCollection', features: stops },
+    vors: { type: 'FeatureCollection', features: vors },
     bounds: [
-      [Math.min(...longitudes), Math.min(...lats)],
-      [Math.max(...longitudes), Math.max(...lats)]
+      [Math.min(...allLons), Math.min(...lats)],
+      [Math.max(...allLons), Math.max(...lats)]
     ]
   }
 }
