@@ -53,7 +53,7 @@ export type VorClass = 'T' | 'L' | 'H'
 export interface Vor {
   ident: string
   name: string
-  type: 'VOR' | 'VOR-DME' | 'VORTAC'
+  type: 'VOR' | 'VOR-DME' | 'VORTAC' | 'NDB' | 'NDB-DME'
   freqKhz: number
   lat: number
   lon: number
@@ -74,6 +74,8 @@ export interface VorFix {
   lon: number
   /** East positive. Magnetic = true − variation. */
   magVarDeg: number
+  /** How far out it was counted on when the route was planned. Missing on routes planned before ranges were kept. */
+  rangeNm?: number
 }
 
 export interface Stop {
@@ -116,6 +118,10 @@ export interface RouteLimits {
    * The routed distance, not the straight line, has to fit the longest leg.
    */
   vorRoutes: boolean
+  /** Lets radio routes use NDBs as well as VORs, for aircraft with an ADF. */
+  useNdbs: boolean
+  /** The longest stretch a radio route flies out of reception of any station, on heading. 0: always in reception. */
+  maxRadioGapNm: number
 }
 
 export const NO_LIMITS: RouteLimits = {
@@ -125,7 +131,9 @@ export const NO_LIMITS: RouteLimits = {
   terrainClearanceFt: 1000,
   maxAirportElevationFt: null,
   maxWaterNm: null,
-  vorRoutes: false
+  vorRoutes: false,
+  useNdbs: false,
+  maxRadioGapNm: 30
 }
 
 /** The optional pause before top of descent, an app-wide setting, so there's time to set up the arrival. */

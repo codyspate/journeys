@@ -1,5 +1,6 @@
 import type { Arrival, ArrivalRunway, CruiseHint, LegBrief, NavLogRow, ProfilePoint, Wind } from '../shared/brief'
 import type { Airport, Journey, Leg, Stop, Vor } from '../shared/journey'
+import { frequencyLabel, isNdbFix } from '../shared/vorCourse'
 import { trackPosition } from './planner'
 import { distanceNm } from './recorder'
 import { alongGreatCircle, type LatLon } from './terrain'
@@ -104,8 +105,15 @@ export function vfrAltitude(eastbound: boolean, floorFt: number, ceilingFt: numb
 }
 
 /** The points the leg is flown through: departure, any VORs, arrival. */
-function pathOf(leg: Leg): (Stop & { vor?: number })[] {
-  const fixes = (leg.vorRoute ?? []).map((fix) => ({ ident: fix.ident, name: fix.name, lat: fix.lat, lon: fix.lon, vor: fix.freqMhz }))
+function pathOf(leg: Leg): (Stop & { frequency?: string; ndb?: boolean })[] {
+  const fixes = (leg.vorRoute ?? []).map((fix) => ({
+    ident: fix.ident,
+    name: fix.name,
+    lat: fix.lat,
+    lon: fix.lon,
+    frequency: frequencyLabel(fix),
+    ndb: isNdbFix(fix)
+  }))
   return [leg.from, ...fixes, leg.to]
 }
 
@@ -245,9 +253,9 @@ function navLogOf(leg: Leg, journey: Journey, sources: BriefSources): NavLogRow[
     const isArrival = i === path.length - 2
     add({
       name: to.name,
-      kind: isArrival ? 'arrival' : 'vor',
+      kind: isArrival ? 'arrival' : to.ndb ? 'ndb' : 'vor',
       ident: to.ident,
-      frequency: to.vor ?? null,
+      frequency: to.frequency ?? null,
       lat: to.lat,
       lon: to.lon
     })
@@ -279,8 +287,8 @@ function runwayInWind(runway: NonNullable<Airport['runways']>[number], wind: Win
   return { ...base, headwindKts: best.head, crosswindKts: best.cross, windEnd: best.end }
 }
 
-function arrivalOf(leg: Leg, airports: Airport[], wind: Wind | null): Arrival | null {
-  const airport = airports.find((a) => a.ident === leg.to.ident)
+function airportCard(ident: string, airports: Airport[], wind: Wind | null): Arrival | null {
+  const airport = airports.find((a) => a.ident === ident)
   if (!airport) return null
   const runways = (airport.runways ?? []).map((r) => runwayInWind(r, wind))
   const windy = wind !== null && wind.kts >= CALM_KTS
@@ -309,6 +317,7 @@ export function legBrief(journey: Journey, leg: Leg, sources: BriefSources): Leg
     cruise: cruiseOf(leg, journey, profile, sources.vors),
     wind: sources.wind,
     navLog: navLogOf(leg, journey, sources),
-    arrival: arrivalOf(leg, sources.airports, sources.wind)
+    departure: airportCard(leg.from.ident, sources.airports, sources.wind),
+    arrival: airportCard(leg.to.ident, sources.airports, sources.wind)
   }
 }

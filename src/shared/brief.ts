@@ -9,6 +9,8 @@ export interface LegBrief {
   wind: Wind | null
   /** Checkpoints in order, ending at the arrival. */
   navLog: NavLogRow[]
+  /** The field the leg leaves from, with the runway most into the wind there now. */
+  departure: Arrival | null
   arrival: Arrival | null
 }
 
@@ -38,11 +40,11 @@ export interface CruiseHint {
 
 export interface NavLogRow {
   name: string
-  kind: 'town' | 'airport' | 'vor' | 'arrival'
+  kind: 'town' | 'airport' | 'vor' | 'ndb' | 'arrival'
   /** For airports and VORs. */
   ident: string | null
-  /** For VORs, in MHz. */
-  frequency: number | null
+  /** For VORs and NDBs, as tuned, such as "114.10" or "373 kHz". */
+  frequency: string | null
   lat: number
   lon: number
   /** From the previous row (or the departure). */
@@ -59,6 +61,7 @@ export interface NavLogRow {
   fuelUsedGal: number
 }
 
+/** An airport at either end of a leg: elevation, pattern altitude and runways. */
 export interface Arrival {
   ident: string
   name: string

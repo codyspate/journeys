@@ -1,9 +1,9 @@
-// Trims the OurAirports navaids CSV (public domain) to the VORs the radio-navigation planner uses.
+// Trims the OurAirports navaids CSV (public domain) to the VORs and NDBs the radio-navigation planner uses.
 // Source: https://davidmegginson.github.io/ourairports-data/navaids.csv
 // Usage: node scripts/build-navaids.mjs <navaids.csv> <output.json>
 //
-// Only VOR, VOR-DME and VORTAC stations are kept. Each gets a service class, which sets how far away
-// it can be received: T (terminal), L (low) or H (high), and the magnetic variation its radials are
+// VOR, VOR-DME and VORTAC stations, and NDB and NDB-DME beacons, are kept. Each gets a service class, which
+// sets how far away it can be received: T (terminal), L (low) or H (high), and the magnetic variation its radials are
 // measured from (east positive): the station's own slaved variation where known, otherwise the local one.
 import { readFileSync, writeFileSync } from 'node:fs'
 
@@ -36,7 +36,15 @@ function parseCsv(text) {
   return body.map((values) => Object.fromEntries(header.map((key, index) => [key, values[index] ?? ''])))
 }
 
-const TYPES = new Set(['VOR', 'VOR-DME', 'VORTAC'])
+const VOR_TYPES = new Set(['VOR', 'VOR-DME', 'VORTAC'])
+const NDB_TYPES = new Set(['NDB', 'NDB-DME'])
+/** A VOR is always between 108 and 118 MHz; an NDB between 190 and 1750 kHz. */
+const tunable = (n) => {
+  const khz = Number(n.frequency_khz)
+  if (VOR_TYPES.has(n.type)) return khz >= 108000 && khz <= 118000
+  if (NDB_TYPES.has(n.type)) return khz >= 190 && khz <= 1750
+  return false
+}
 
 /** Usage type first, then transmitter power, as the FAA classes them. */
 function serviceClass(usage, power) {
@@ -51,8 +59,8 @@ const [input, output] = process.argv.slice(2)
 if (!input || !output) throw new Error('Usage: node scripts/build-navaids.mjs <navaids.csv> <output.json>')
 
 const rows = parseCsv(readFileSync(input, 'utf8'))
-  // RNAV-only entries aren't stations you can tune, and a VOR is always between 108 and 118 MHz.
-  .filter((n) => TYPES.has(n.type) && n.usageType !== 'RNAV' && n.ident && Number(n.frequency_khz) >= 108000 && Number(n.frequency_khz) <= 118000)
+  // RNAV-only entries aren't stations you can tune.
+  .filter((n) => tunable(n) && n.usageType !== 'RNAV' && n.ident)
   .map((n) => [
     n.ident,
     n.name,
@@ -69,4 +77,4 @@ const rows = parseCsv(readFileSync(input, 'utf8'))
   .sort((a, b) => a[0].localeCompare(b[0]))
 
 writeFileSync(output, JSON.stringify(rows))
-console.log(`${rows.length} VORs written to ${output}`)
+console.log(`${rows.length} navaids written to ${output}`)

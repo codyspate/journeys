@@ -11,6 +11,7 @@ import { UntrackedBanner } from './UntrackedBanner'
 import { UpdateBanner } from './Updates'
 
 type View = 'home' | 'journeys' | 'logbook' | 'hangar' | 'settings'
+const FLYING_CHECK_MS = 5000
 const VIEWS: { id: View; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'journeys', label: 'Journeys' },
@@ -24,6 +25,8 @@ export function App() {
   // What Home asked the Journeys tab to do: open a Journey, or start planning one.
   const [journeyRequest, setJourneyRequest] = useState<JourneyRequest | null>(null)
   const [status, setStatus] = useState<SimStatus>({ connected: false, simName: null })
+  // Whether a flight is under way, so any tab can jump back to the flight view.
+  const [flying, setFlying] = useState(false)
 
   useEffect(() => {
     void window.journeys.getStatus().then(setStatus)
@@ -31,6 +34,15 @@ export function App() {
     void window.journeys.restoredFrom?.().then((setAside) => setAside && setView('settings'))
     return window.journeys.onStatus(setStatus)
   }, [])
+
+  useEffect(() => {
+    if (!status.connected) return setFlying(false)
+    const check = () =>
+      void window.journeys.liveSim?.().then((live) => setFlying(live.connected && (live.onGround === false || live.flightId !== null)))
+    check()
+    const timer = setInterval(check, FLYING_CHECK_MS)
+    return () => clearInterval(timer)
+  }, [status.connected])
 
   return (
     <div className="app">
@@ -45,9 +57,16 @@ export function App() {
             ))}
           </nav>
         </div>
-        <div className={status.connected ? 'status on' : 'status'} role="status">
-          <span className="dot" />
-          {status.connected ? `Connected to ${status.simName}` : 'Waiting for Microsoft Flight Simulator'}
+        <div className="header-right">
+          {flying && view !== 'home' && (
+            <button className="flight-pill" onClick={() => setView('home')}>
+              In flight · show flight view
+            </button>
+          )}
+          <div className={status.connected ? 'status on' : 'status'} role="status">
+            <span className="dot" />
+            {status.connected ? `Connected to ${status.simName}${flying ? ' · in flight' : ''}` : 'Waiting for Microsoft Flight Simulator'}
+          </div>
         </div>
       </header>
 

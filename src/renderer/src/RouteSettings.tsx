@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { type JourneySettings, type Performance, PERFORMANCE_PRESETS, type RouteLimits } from '../../shared/journey'
 import { errorText } from './errors'
+import { feet } from './legNotes'
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
   return (
@@ -108,14 +109,31 @@ export function SettingsFields({ settings, onChange }: { settings: JourneySettin
         />
         Plan radio navigation routes (VOR to VOR)
       </label>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={limits.useNdbs}
+          disabled={!limits.vorRoutes}
+          onChange={(e) => onChange({ ...settings, limits: { ...limits, useNdbs: e.target.checked } })}
+        />
+        Use NDBs too (needs an ADF)
+      </label>
+      <div className="fields">
+        <NumberField
+          label="Longest gap out of reception (nm)"
+          value={limits.maxRadioGapNm}
+          onChange={(value) => onChange({ ...settings, limits: { ...limits, maxRadioGapNm: value } })}
+        />
+      </div>
       <p className="muted settings-note">
-        A light VFR aid: each leg becomes a chain of VORs, with the radial out of each station, the course into the next, and
-        a hemispheric VFR altitude to consider. Only stops reachable that way are chosen, with the routed distance kept within your
-        longest leg and every stretch within your terrain and water limits. Stations are counted on out to their low-altitude
-        range, 40 nm (25 nm for terminal VORs). Where VORs are too sparse, legs fall back to direct. Station data comes from
-        OurAirports and may differ from your sim.
+        A light VFR aid: each leg becomes a chain of stations, with the course out of each and into the next. Only stops reachable
+        that way are chosen, with the routed distance kept within your longest leg and every stretch within your terrain and water
+        limits. VORs reach further the higher you fly, so their range comes from the highest you'll fly (
+        {limits.maxAltitudeFt === null ? 'assumed 6,500 ft, since it\u2019s blank' : feet(limits.maxAltitudeFt)}), up to their rated
+        range. Like flying it for real, a stretch can leave one station behind and carry on on heading until the next comes in, for
+        up to the gap you set; full coverage is preferred where it costs little extra. Set the gap to 0 to stay in reception all the
+        way. Where stations are too sparse, legs fall back to direct. Station data comes from OurAirports and may differ from your sim.
       </p>
-
     </>
   )
 }

@@ -479,7 +479,8 @@ table.flights tbody tr:focus-visible {
   margin-top: 28px;
 }
 
-.next-leg {
+/* One card style for every leg view on Home: the next leg, the briefing and the flight view. */
+.card {
   margin: 12px 0 8px;
   padding: 20px 22px;
   background: var(--panel);
@@ -488,51 +489,149 @@ table.flights tbody tr:focus-visible {
   border-radius: 6px;
 }
 
-.next-leg h2 {
+.card.flight-card {
+  border-left-color: var(--good);
+}
+
+.card h2 {
   margin: 0 0 4px;
 }
 
-.next-leg p {
+.card p {
   margin: 6px 0;
 }
 
-.next-leg .eyebrow {
+.card h4 {
+  margin: 18px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.card section + section,
+.card .airport-card {
+  margin-top: 4px;
+}
+
+.eyebrow {
   margin: 0 0 8px;
   color: var(--muted);
   font-size: 13px;
 }
 
-.next-leg-route {
+.leg-route {
   font-size: 30px;
   letter-spacing: 0.02em;
 }
 
-.next-leg-stats {
+.leg-stats.large {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 20px;
   margin: 12px 0;
-  color: var(--muted);
   font-size: 14px;
-  font-variant-numeric: tabular-nums;
 }
 
-.next-leg-stats strong {
-  color: var(--text);
+.leg-stats.large strong {
   font-size: 16px;
 }
 
-.next-leg .ready {
+.leg-stats strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.card .ready {
   color: var(--good);
 }
 
-.next-leg > button,
 .readiness-action button {
   margin-top: 10px;
 }
 
 .readiness-action {
   margin: 10px 0;
+}
+
+/* The line on what the sim is doing, and the switch between the focused view and the overview. */
+.home-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.home-top .where {
+  margin: 0;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.segmented button {
+  padding: 4px 14px;
+  color: var(--muted);
+  background: none;
+  font-weight: 500;
+}
+
+.segmented button.active {
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* Big numbers for a glance in flight. */
+.readouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 16px;
+  margin: 14px 0 6px;
+}
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.readout-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.readout-value {
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.readout-value small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.next-checkpoint-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.airport-card h4 .muted {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.brief-line {
+  margin: 6px 0;
 }
 
 .home-list {
@@ -923,11 +1022,12 @@ h3 {
   color: var(--good);
 }
 
+/* Buttons at the foot of any card, in the Hangar and on Home alike. */
 .card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 8px 12px;
+  margin-top: 12px;
 }
 
 .card-actions button {
@@ -1043,10 +1143,19 @@ button.secondary {
 }
 
 .leg-stats {
-  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
   color: var(--muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+
+.leg-row-stats {
+  margin-top: 4px;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .leg.flown .tag {
@@ -1070,6 +1179,28 @@ button.secondary {
 
 .reach p {
   margin: 4px 0;
+}
+
+.reach.short {
+  border-left-color: #e5735c;
+}
+
+.card .reach {
+  margin: 4px 0;
+  background: var(--bg);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.flight-pill {
+  padding: 4px 12px;
+  color: #08210f;
+  background: var(--good);
+  font-size: 13px;
 }
 
 input:not([type]) {
@@ -1312,7 +1443,8 @@ tr.skipped td {
   color: var(--muted);
   font-weight: normal;
 }
-.nav-log-vor td:first-child {
+.nav-log-vor td:first-child,
+.nav-log-ndb td:first-child {
   color: #7fc9d9;
 }
 .nav-log-arrival td {
@@ -1323,4 +1455,40 @@ tr.skipped td {
 }
 .descent-toggle {
   margin: 8px 0;
+}
+
+/* In flight: what's done fades, what's next stands out. */
+.vor-route li.passed > span,
+.nav-log tr.passed td {
+  opacity: 0.45;
+}
+
+.vor-route li.current > span {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.nav-log tr.next td {
+  color: var(--text);
+  font-weight: 600;
+  background: rgba(95, 208, 138, 0.1);
+}
+
+.terrain-aircraft {
+  stroke: var(--good);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.terrain-aircraft-dot {
+  fill: var(--good);
+}
+
+.key-aircraft {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--good);
 }

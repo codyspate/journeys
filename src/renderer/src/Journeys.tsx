@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   type Airport,
   type Journey,
@@ -6,23 +6,18 @@ import {
   type Leg,
   NO_LIMITS,
   PERFORMANCE_PRESETS,
-  type ReachOptions,
   type RouteEdit,
   type RouteLimits
 } from '../../shared/journey'
 import type { FlightJournal } from '../../shared/logbook'
 import { errorText } from './errors'
 import { JourneyMap } from './JourneyMap'
-import { feet, legNotes, MENTION_WATER_NM } from './legNotes'
+import { currentJourney, hoursMinutes } from './homeState'
 import { Kneeboard } from './Kneeboard'
-import { VorRouteList } from './VorRouteList'
+import { LegStats } from './LegParts'
+import { legNotes } from './legNotes'
 import { RouteSettings, SettingsFields } from './RouteSettings'
 import { SaveControls } from './SaveControls'
-
-const hoursMinutes = (minutes: number) => {
-  const total = Math.round(minutes)
-  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}m`
-}
 
 /** What another screen wants the Journeys tab to do when it opens. */
 export type JourneyRequest = { kind: 'open'; id: string } | { kind: 'plan'; from?: string; to?: string }
@@ -226,17 +221,12 @@ function LegRow({
         </strong>
         <span className="muted">{leg.to.name}</span>
       </div>
-      <div className="leg-stats">
-        <span>{Math.round(leg.distanceNm)} nm</span>
-        <span>{hoursMinutes(leg.minutes)}</span>
-        <span>{leg.fuelGal.toFixed(0)} gal</span>
-        {leg.highestTerrainFt != null && <span>Highest ground {feet(leg.highestTerrainFt)}</span>}
-        {leg.longestWaterNm != null && leg.longestWaterNm >= MENTION_WATER_NM && <span>{Math.round(leg.longestWaterNm)} nm over water</span>}
+      <div className="leg-row-stats">
+        <LegStats leg={leg} />
         <span className="tag">
           {leg.status === 'flown' ? 'Flown' : chosen ? 'Your stop' : leg.confidence === 'firm' ? 'Planned' : 'Tentative'}
         </span>
       </div>
-      {leg.status === 'planned' && <VorRouteList leg={leg} />}
       {leg.status === 'planned' &&
         legNotes(leg, limits).map((note) => (
           <p key={note} className="note">
@@ -255,33 +245,11 @@ function LegRow({
   )
 }
 
-function ReachBanner({ reach, onAccept }: { reach: ReachOptions; onAccept: (ident: string) => void }) {
-  const choice = reach.further ?? reach.closer
-  return (
-    <div className="reach" role="status">
-      <p>
-        {reach.plannedStop.ident} is {Math.round(reach.distanceToPlannedNm)} nm away, arriving with{' '}
-        {Math.max(0, Math.round(reach.reserveAtPlannedMinutes))} min of fuel.
-      </p>
-      {choice && (
-        <p>
-          <strong>{choice.stop.name}</strong> ({choice.stop.ident}) is {reach.further ? 'also in reach' : 'an option'},{' '}
-          {Math.round(choice.distanceNm)} nm away with {Math.max(0, Math.round(choice.reserveMinutes))} min of fuel.{' '}
-          <button className="link" onClick={() => onAccept(choice.stop.ident)}>
-            Make it my next stop
-          </button>
-        </p>
-      )}
-    </div>
-  )
-}
-
 export function Journeys({ request = null, onHandled }: { request?: JourneyRequest | null; onHandled?: () => void } = {}) {
   // A new Journey asked for from Home, with its airports filled in.
   const [plan, setPlan] = useState<{ from?: string; to?: string; key: number }>({ key: 0 })
   const [journeys, setJourneys] = useState<Journey[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [reach, setReach] = useState<ReachOptions | null>(null)
   const [stop, setStop] = useState('')
   const [changing, setChanging] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -307,14 +275,14 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
   const replace = (journey: Journey) =>
     setJourneys((all) => (all.some((j) => j.id === journey.id) ? all.map((j) => (j.id === journey.id ? journey : j)) : [journey, ...all]))
 
+  // Opening the tab on its own shows the Journey under way, ready to refine; Home can ask for something else.
+  const openedFor = useRef(request)
   useEffect(() => {
-    void window.journeys.listJourneys().then(setJourneys)
-    const offReach = window.journeys.onReach(setReach)
-    const offUpdated = window.journeys.onJourneyUpdated(replace)
-    return () => {
-      offReach()
-      offUpdated()
-    }
+    void window.journeys.listJourneys().then((list) => {
+      setJourneys(list)
+      if (!openedFor.current) setSelectedId((current) => current ?? currentJourney(list)?.id ?? null)
+    })
+    return window.journeys.onJourneyUpdated(replace)
   }, [])
 
   const run = async (action: () => Promise<Journey>) => {
@@ -422,7 +390,6 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
                   const { id } = selected
                   await window.journeys.deleteJourney(id)
                   setJourneys((all) => all.filter((j) => j.id !== id))
-                  setReach((current) => (current?.journeyId === id ? null : current))
                   setSelectedId(null)
                 }}
               />
@@ -430,10 +397,6 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
                 {selected.performance.name} · {planned.length} legs left · {Math.round(remainingNm)} nm ·{' '}
                 {hoursMinutes(remainingMinutes)} at cruise, still air
               </p>
-
-              {reach?.journeyId === selected.id && (
-                <ReachBanner reach={reach} onAccept={(ident) => edit({ kind: 'add', ident })} />
-              )}
             </div>
 
             <div className="journey-map-area">

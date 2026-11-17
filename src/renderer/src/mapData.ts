@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import type { Airport, AirportSize, Journey, Stop } from '../../shared/journey'
+import { frequencyLabel } from '../../shared/vorCourse'
 
 export type LineStatus = 'flown' | 'firm' | 'tentative'
 export type StopKind = 'endpoint' | 'current' | 'stop'
@@ -94,7 +95,7 @@ export function journeyMapData(journey: Journey): JourneyMapData {
       seenVors.add(key)
       vors.push({
         type: 'Feature',
-        properties: { ident: fix.ident, name: fix.name, frequency: fix.freqMhz.toFixed(2) },
+        properties: { ident: fix.ident, name: fix.name, frequency: frequencyLabel(fix) },
         geometry: { type: 'Point', coordinates: [lon, fix.lat] }
       })
     }

@@ -17,7 +17,7 @@ import {
 import type { AirportIndex } from './airports'
 import { distanceNm } from './recorder'
 import type { Terrain } from './terrain'
-import { VorRouter, type VorRoute } from './vor'
+import { isNdb, VorRouter, type VorRoute } from './vor'
 
 const EARTH_NM = 3440.065
 const SAME_PLACE_NM = 5
@@ -123,7 +123,7 @@ export function planStops(from: Stop, to: Stop, airports: Airport[], settings: J
 /** VORs that could help between two points: near the line, allowing for how far they reach. */
 function vorsNear(from: Stop, to: Stop, vors: Vor[], widthNm: number): Vor[] {
   const total = distanceNm(from.lat, from.lon, to.lat, to.lon)
-  const margin = widthNm + 40
+  const margin = widthNm + 130
   return vors.filter((vor) => {
     const { alongNm, crossNm } = trackPosition(from, to, vor)
     return crossNm <= margin && alongNm > -margin && alongNm < total + margin
@@ -172,18 +172,23 @@ function planSegment(from: Stop, to: Stop, airports: Airport[], settings: Journe
     return remember(cache.excess, key, over)
   }
   const width = corridorWidth(limit)
-  const router =
-    limits.vorRoutes && vors
-      ? new VorRouter(
-          vorsNear(from, to, vors, width),
-          // A little past the longest leg, so a stop the player chose still gets a route to show.
-          limit * 1.5,
-          (a, b) => !checksTerrain || !breaksLimits(a, b),
-          stopKey
-        )
-      : null
+  // Terminal NDBs are compass locators for approaches, too weak to navigate between.
+  const stations =
+    limits.vorRoutes && vors ? vorsNear(from, to, vors.filter((v) => (isNdb(v) ? limits.useNdbs && v.serviceClass !== 'T' : true)), width + limits.maxRadioGapNm) : []
+  const routerFor = (searchNm: number) =>
+    new VorRouter(stations, {
+      altitudeFt: limits.maxAltitudeFt,
+      maxGapNm: limits.maxRadioGapNm,
+      searchNm,
+      segmentOk: (a, b) => !checksTerrain || !breaksLimits(a, b),
+      keyOf: stopKey
+    })
+  const router = limits.vorRoutes && vors ? routerFor(limit) : null
+  // Further out, only for drawing a route to a stop the player chose that's past the longest leg.
+  let further: VorRouter | null = null
+  const routeFor = (a: Stop, b: Stop) => router && (router.route(a, b) ?? (further ??= routerFor(limit * 1.5)).route(a, b))
   const withRoutes = (stops: Stop[]): Segment =>
-    router ? { stops, routes: [from, ...stops].map((stop, i) => router.route(stop, [...stops, to][i])) } : { stops }
+    router ? { stops, routes: [from, ...stops].map((stop, i) => routeFor(stop, [...stops, to][i])) } : { stops }
 
   if (router) {
     const direct = router.route(from, to)
@@ -356,6 +361,7 @@ export function checkSettings(settings: JourneySettings): JourneySettings {
     [limits.maxWaterNm, 'Longest water crossing']
   ]
   for (const [value, label] of optional) if (value !== null) positive(value, label)
+  notNegative(limits.maxRadioGapNm, 'Longest gap out of reception')
   if (limits.minLegNm !== null && limits.minLegNm >= maxLegNm(settings)) {
     throw new Error('Shortest leg needs to be less than the longest leg this aircraft can fly.')
   }

@@ -39,9 +39,20 @@ export interface RouteSegment {
   /** Set when the stretch ends at a VOR: the course to track in on, measured at that station. */
   inboundCourse: number | null
   distanceNm: number
+  /**
+   * How much of the stretch is out of reception of both ends, flown on heading until the next station comes in.
+   * 0 when it's covered all the way, or when the ranges weren't kept with the route.
+   */
+  gapNm: number
 }
 
+/** A radio station on the route, VOR or NDB, as opposed to the departure or arrival. */
 export const isVor = (point: Stop | VorFix): point is VorFix => 'freqMhz' in point
+export const isNdbFix = (fix: Pick<VorFix, 'type'>) => fix.type === 'NDB' || fix.type === 'NDB-DME'
+/** As it's tuned: MHz for a VOR, kHz for an NDB. */
+export const frequencyLabel = (fix: Pick<VorFix, 'type' | 'freqMhz'>) =>
+  isNdbFix(fix) ? `${Math.round(fix.freqMhz * 1000)} kHz` : fix.freqMhz.toFixed(2)
+const coverage = (point: Stop | VorFix) => (isVor(point) ? (point.rangeNm ?? Infinity) : 0)
 
 /** Each stretch of a leg's radio route, with what to set on the OBS for it. */
 export function routeSegments(leg: Pick<Leg, 'from' | 'to' | 'vorRoute'>): RouteSegment[] {
@@ -54,7 +65,8 @@ export function routeSegments(leg: Pick<Leg, 'from' | 'to' | 'vorRoute'>): Route
       to,
       outboundRadial: isVor(from) ? magnetic(initialBearing(from, to), from.magVarDeg ?? 0) : null,
       inboundCourse: isVor(to) ? magnetic(finalBearing(from, to), to.magVarDeg ?? 0) : null,
-      distanceNm: distanceNm(from, to)
+      distanceNm: distanceNm(from, to),
+      gapNm: Math.max(0, distanceNm(from, to) - coverage(from) - coverage(to))
     }
   })
   // A VOR on the airport itself leaves a stretch of almost nothing to fly; it isn't worth a line.

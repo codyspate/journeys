@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AirframeRecord, LiveSim } from '../../shared/airframe'
-import { type DescentSettings, type Journey, type Place, PLACE_KINDS, type PlaceKind } from '../../shared/journey'
+import { type Journey, type Place, PLACE_KINDS, type PlaceKind, type ReachOptions } from '../../shared/journey'
 import type { LogbookFlight } from '../../shared/logbook'
 import type { RestoreReport } from '../../shared/types'
 import { errorText } from './errors'
-import { aircraftLabels, currentJourney, hoursMinutes, progressOf, type Readiness, readiness } from './homeState'
+import { FlightPanel } from './FlightPanel'
+import { type HomeMode, homeMode } from './flightProgress'
+import { aircraftLabels, currentJourney, progressOf, type Readiness, readiness } from './homeState'
 import { AirportInput, type JourneyRequest } from './Journeys'
-import { LiveFlightMap } from './LiveFlightMap'
-import { feet, legNotes } from './legNotes'
 import { Kneeboard } from './Kneeboard'
-import { VorRouteList } from './VorRouteList'
+import { LegHeading, LegStats, useDescentSettings } from './LegParts'
+import { LiveFlightMap } from './LiveFlightMap'
+import { legNotes } from './legNotes'
+import { PreflightPanel } from './PreflightPanel'
 import { restoreSummary } from './RestoreResult'
 
 const REFRESH_MS = 3000
@@ -39,12 +42,13 @@ interface HomeProps {
   onOpenLogbook: () => void
 }
 
+/** One line on what the sim is doing, at the top of Home whatever it's showing. */
 function WhereYouAre({ live }: { live: LiveSim }) {
-  if (!live.connected) return <p className="muted">Microsoft Flight Simulator isn't running.</p>
-  if (!live.aircraftName || live.lat === null) return <p className="muted">Connected. Waiting for a flight to load.</p>
-  const where = live.onGround === false ? (live.nearAirport ? `in the air near ${place(live.nearAirport)}` : 'in the air') : `at ${place(live.nearAirport)}`
+  if (!live.connected) return <p className="muted where">Microsoft Flight Simulator isn't running.</p>
+  if (!live.aircraftName || live.lat === null) return <p className="muted where">Connected. Waiting for a flight to load.</p>
+  const where = live.onGround === false ? (live.nearAirport ? `in the air near ${place(live.nearAirport)}` : 'in the air') : `on the ground at ${place(live.nearAirport)}`
   return (
-    <p>
+    <p className="where">
       You're in the <strong>{live.aircraftName}</strong>, {where}.
     </p>
   )
@@ -122,41 +126,9 @@ function NextLeg({ journey, live, airframes, labels, onOpen }: {
   }
 
   return (
-    <article className="next-leg">
-      <p className="eyebrow">
-        {journey.name} · leg {progress.legNumber} of {progress.legCount} · {Math.round(progress.remainingNm).toLocaleString()} nm to go
-      </p>
-      <h2 className="next-leg-route">
-        {leg.from.ident} <span aria-hidden="true">→</span>
-        <span className="sr-only">to</span> {leg.to.ident}
-      </h2>
-      <p className="muted">
-        {leg.from.name} to {leg.to.name}
-      </p>
-      <div className="next-leg-stats">
-        <span>
-          <strong>{Math.round(leg.distanceNm)}</strong> nm
-        </span>
-        <span>
-          <strong>{hoursMinutes(leg.minutes)}</strong> at cruise
-        </span>
-        <span>
-          <strong>{leg.fuelGal.toFixed(0)}</strong> gal
-        </span>
-        {leg.highestTerrainFt != null && (
-          <span>
-            highest ground <strong>{feet(leg.highestTerrainFt)}</strong>
-          </span>
-        )}
-      </div>
-      <VorRouteList leg={leg} />
-      {legNotes(leg, journey.limits).map((note) => (
-        <p key={note} className="note">
-          {note}
-        </p>
-      ))}
-      <DescentToggle to={leg.to.ident} flying={live.flightId !== null} />
-      <Kneeboard journeyId={journey.id} leg={leg} limits={journey.limits} />
+    <article className="card next-leg">
+      <LegHeading leg={leg} eyebrow={`Next leg · ${journey.name} · leg ${progress.legNumber} of ${progress.legCount} · ${Math.round(progress.remainingNm).toLocaleString()} nm to go`} />
+      <LegStats leg={leg} large />
       <ReadinessLine
         state={readiness(leg, live, airframes)}
         start={leg.from.ident}
@@ -167,40 +139,18 @@ function NextLeg({ journey, live, airframes, labels, onOpen }: {
         connected={live.connected}
       />
       {message && <p className="note">{message}</p>}
-      <button className="secondary" onClick={onOpen}>
-        Open Journey
-      </button>
+      {legNotes(leg, journey.limits).map((note) => (
+        <p key={note} className="note">
+          {note}
+        </p>
+      ))}
+      <Kneeboard journeyId={journey.id} leg={leg} limits={journey.limits} />
+      <div className="card-actions">
+        <button className="secondary" onClick={onOpen}>
+          Open Journey
+        </button>
+      </div>
     </article>
-  )
-}
-
-/**
- * The top-of-descent pause. During a flight it's a switch right here; otherwise it just says whether it's on.
- * It's one app-wide setting, so it stays as it was left across restarts.
- */
-function DescentToggle({ to, flying }: { to: string; flying: boolean }) {
-  const [descent, setDescent] = useState<DescentSettings | null>(null)
-  useEffect(() => {
-    void window.journeys.getSettings().then((settings) => setDescent(settings.descent ?? null))
-  }, [flying])
-  if (!descent) return null
-  if (!flying) {
-    return descent.pauseBeforeTod ? (
-      <p className="muted">Journeys will pause the sim {descent.minutesBefore} min before top of descent into {to}.</p>
-    ) : null
-  }
-  return (
-    <label className="checkbox descent-toggle">
-      <input
-        type="checkbox"
-        checked={descent.pauseBeforeTod}
-        onChange={async (e) => {
-          const settings = await window.journeys.updateSettings({ descent: { ...descent, pauseBeforeTod: e.target.checked } })
-          setDescent(settings.descent)
-        }}
-      />
-      Pause the sim {descent.minutesBefore} min before top of descent into {to}
-    </label>
   )
 }
 
@@ -282,12 +232,18 @@ function YourPlaces({ places, from, onPlan, onChanged }: { places: Place[]; from
   )
 }
 
+const MODE_LABEL: Record<HomeMode, string> = { flying: 'Flight', preflight: 'Briefing', overview: 'Overview' }
+
 export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
   const [journeys, setJourneys] = useState<Journey[] | null>(null)
   const [places, setPlaces] = useState<Place[]>([])
   const [airframes, setAirframes] = useState<AirframeRecord[]>([])
   const [lastFlight, setLastFlight] = useState<LogbookFlight | null>(null)
   const [live, setLive] = useState<LiveSim>(OFFLINE)
+  const [reach, setReach] = useState<ReachOptions | null>(null)
+  // The player can step out of the flight view or briefing to the overview, until the situation changes.
+  const [overviewFor, setOverviewFor] = useState<HomeMode | null>(null)
+  const { descent, setPause } = useDescentSettings()
 
   const load = useCallback(() => {
     void window.journeys.listJourneys().then(setJourneys)
@@ -302,9 +258,11 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
     load()
     const timer = setInterval(load, REFRESH_MS)
     const offUpdated = window.journeys.onJourneyUpdated(load)
+    const offReach = window.journeys.onReach(setReach)
     return () => {
       clearInterval(timer)
       offUpdated()
+      offReach()
     }
   }, [load])
 
@@ -319,6 +277,13 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
   const wanted = places.filter((place) => place.kind === 'want' && place.ident !== from)
 
   const nextLeg = journey ? (progressOf(journey).next ?? null) : null
+  const situation = homeMode(named, nextLeg)
+  const mode: HomeMode = overviewFor === situation ? 'overview' : situation
+  const openJourney = () => journey && onJourney({ kind: 'open', id: journey.id })
+  const acceptReach = (ident: string) => {
+    if (journey) void window.journeys.editRoute(journey.id, { kind: 'add', ident }).then(load)
+  }
+
   return (
     <section className="logbook home">
       <div className="home-layout">
@@ -326,10 +291,105 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
           <LiveFlightMap leg={nextLeg} />
         </aside>
         <div className="home-main">
-      <WhereYouAre live={named} />
+          <div className="home-top">
+            <WhereYouAre live={named} />
+            {situation !== 'overview' && (
+              <div className="segmented" role="group" aria-label="Show">
+                <button className={mode === situation ? 'active' : ''} aria-pressed={mode === situation} onClick={() => setOverviewFor(null)}>
+                  {MODE_LABEL[situation]}
+                </button>
+                <button className={mode === 'overview' ? 'active' : ''} aria-pressed={mode === 'overview'} onClick={() => setOverviewFor(situation)}>
+                  Overview
+                </button>
+              </div>
+            )}
+          </div>
 
+          {mode === 'flying' && (
+            <FlightPanel
+              journey={journey}
+              leg={nextLeg}
+              live={named}
+              reach={reach}
+              descent={descent}
+              onDescentChange={(on) => void setPause(on)}
+              onAcceptReach={acceptReach}
+            />
+          )}
+          {mode === 'preflight' && journey && nextLeg && (
+            <PreflightPanel
+              journey={journey}
+              leg={nextLeg}
+              aircraftName={named.aircraftName}
+              descent={descent}
+              onDescentChange={(on) => void setPause(on)}
+              onOpenJourney={openJourney}
+            />
+          )}
+          {mode === 'overview' && (
+            <Overview
+              journeys={journeys}
+              journey={journey}
+              others={others}
+              live={named}
+              airframes={airframes}
+              labels={labels}
+              places={places}
+              wanted={wanted}
+              from={from}
+              lastFlight={lastFlight}
+              onPlan={plan}
+              onJourney={onJourney}
+              onPlacesChanged={load}
+              onOpenHangar={onOpenHangar}
+              onOpenLogbook={onOpenLogbook}
+            />
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** The bigger picture: the next leg, other Journeys, places, aircraft and the last flight. */
+function Overview({
+  journeys,
+  journey,
+  others,
+  live,
+  airframes,
+  labels,
+  places,
+  wanted,
+  from,
+  lastFlight,
+  onPlan,
+  onJourney,
+  onPlacesChanged,
+  onOpenHangar,
+  onOpenLogbook
+}: {
+  journeys: Journey[] | null
+  journey: Journey | null
+  others: Journey[]
+  live: LiveSim
+  airframes: AirframeRecord[]
+  labels: Labels
+  places: Place[]
+  wanted: Place[]
+  from: string | undefined
+  lastFlight: LogbookFlight | null
+  onPlan: (to?: string) => void
+  onJourney: (request: JourneyRequest) => void
+  onPlacesChanged: () => void
+  onOpenHangar: () => void
+  onOpenLogbook: () => void
+}) {
+  return (
+    <>
       {journeys && !journey && (
-        <article className="next-leg">
+        <article className="card next-leg">
+          <p className="eyebrow">Next leg</p>
           <h2>No Journey under way</h2>
           <p className="muted">Plan a trip and Journeys will line up the next leg here every time you sit down to fly.</p>
           {wanted.length > 0 && (
@@ -338,18 +398,20 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
               {wanted.slice(0, 3).map((place, i) => (
                 <span key={place.id}>
                   {i > 0 && ', '}
-                  <button className="link" onClick={() => plan(place.ident)}>
+                  <button className="link" onClick={() => onPlan(place.ident)}>
                     {place.name} ({place.ident})
                   </button>
                 </span>
               ))}
             </p>
           )}
-          <button onClick={() => plan()}>Plan a Journey</button>
+          <div className="card-actions">
+            <button onClick={() => onPlan()}>Plan a Journey</button>
+          </div>
         </article>
       )}
       {journey && (
-        <NextLeg journey={journey} live={named} airframes={airframes} labels={labels} onOpen={() => onJourney({ kind: 'open', id: journey.id })} />
+        <NextLeg journey={journey} live={live} airframes={airframes} labels={labels} onOpen={() => onJourney({ kind: 'open', id: journey.id })} />
       )}
 
       {others.length > 0 && (
@@ -373,7 +435,7 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
         </>
       )}
 
-      <YourPlaces places={places} from={from} onPlan={plan} onChanged={load} />
+      <YourPlaces places={places} from={from} onPlan={onPlan} onChanged={onPlacesChanged} />
 
       {airframes.length > 0 && (
         <>
@@ -405,8 +467,6 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
           </p>
         </>
       )}
-        </div>
-      </div>
-    </section>
+    </>
   )
 }

@@ -16,9 +16,10 @@ of your travels. It never tells you what you can't do.
   aircraft's range and how long you like to fly. Stop early, go further, drag a stop to another airport: the rest re-plans
   around what you actually did. You still set up each flight yourself, with whatever tools you like.
 - **Respects the terrain.** Optionally keep legs under a ceiling, limit water crossings, or skip high airports.
-- **Old-school VOR navigation, if you want it.** Turn it on for a Journey and every leg becomes a chain of VORs, with
-  the radial out of each, the course into the next, distances and frequencies, all within your leg length and terrain
-  limits. You tune and fly it yourself.
+- **Old-school radio navigation, if you want it.** Turn it on for a Journey and every leg becomes a chain of VORs (and
+  NDBs, if your aircraft has an ADF), with the course out of each and into the next, distances and frequencies, all within
+  your leg length and terrain limits. VORs reach further the higher you fly, and like the real thing a route can fly on
+  heading through a short gap until the next station comes in. You tune and fly it yourself.
 - **A kneeboard for every leg.** A side view of the terrain with a suggested VFR cruise altitude, a nav log of towns and
   airports about every 12 nm with course, heading, time and fuel, and an arrival card with runways, pattern altitude and
   the likely runway for the wind. All suggestions; nothing is enforced and nothing goes to the sim.
@@ -134,7 +135,7 @@ The workflow tests, builds and publishes the installer, and installed copies upd
 
 ## Data and credits
 
-- Airports, runways and VORs: [OurAirports](https://ourairports.com/data/) (public domain). Rebuild with
+- Airports, runways, VORs and NDBs: [OurAirports](https://ourairports.com/data/) (public domain). Rebuild with
   `scripts/build-airports.mjs` and `scripts/build-navaids.mjs`.
 - Town names for nav log checkpoints: [GeoNames](https://www.geonames.org/) `cities5000`, licensed under
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); trimmed to name, position, population and country. Rebuild with
