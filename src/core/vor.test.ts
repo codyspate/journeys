@@ -213,6 +213,19 @@ describe('planning with radio navigation', () => {
       expect(idents(replanned)).toEqual(idents(skipped))
     })
 
+    it('keeps the leg it changed, so a skipped station never comes back with a new stop', () => {
+      let skipped = journey
+      for (let i = 0; i < 2 && skipped.legs[0].vorRoute!.length > 0; i++) {
+        const gone = skipped.legs[0].vorRoute![0].ident
+        skipped = apply(skipped, { kind: 'radio-skip', ...pair, index: 0 })
+        expect(skipped.legs[0].to.ident).toBe(first.to.ident)
+        expect(idents(skipped)).not.toContain(gone)
+      }
+      expect(skipped.via.map((v) => v.ident)).toContain(first.to.ident)
+      // One saved route per departure: earlier ones from the same airport are replaced.
+      expect(skipped.radioRoutes?.filter((c) => c.from === first.from.ident)).toHaveLength(1)
+    })
+
     it('adds a station by its ident where it adds the least distance, and goes back to the suggestion', () => {
       const skipped = apply(journey, { kind: 'radio-skip', ...pair, index: 0 })
       const back = apply(skipped, { kind: 'radio-add', ...pair, ident: first.vorRoute![0].ident.toLowerCase() })

@@ -245,6 +245,8 @@ function planCorridor(
       keyOf: stopKey
     })
   const router = limits.vorRoutes && vors ? routerFor(limit) : null
+  const ownRoute = router && vors ? radioRoutes.find((c) => c.from === from.ident && c.to === to.ident) : undefined
+  if (ownRoute) return { stops: [], routes: [chosenRoute(from, to, ownRoute, vors!, limits.maxAltitudeFt)] }
   // Further out, only for drawing a route to a stop the player chose that's past the longest leg.
   let further: VorRouter | null = null
   // A leg the player gave their own radio route to keeps it.
@@ -545,9 +547,25 @@ const ADD_STATION_WITHIN_NM = 300
 const refOf = ({ ident, lat, lon }: StationRef): StationRef => ({ ident, lat, lon })
 
 /** Sets, or with null clears, the player's own radio route for one leg. */
+/**
+ * Sets, or with null clears, the player's own radio route for one leg. Only one leg leaves any airport,
+ * so a route chosen earlier from the same departure, to a stop no longer planned, is dropped.
+ */
 function withRadioRoute(journey: Journey, from: string, to: string, stations: StationRef[] | null): Journey {
-  const others = (journey.radioRoutes ?? []).filter((c) => !(c.from === from && c.to === to))
+  const others = (journey.radioRoutes ?? []).filter((c) => c.from !== from)
   return { ...journey, radioRoutes: stations ? [...others, { from, to, stations }] : others }
+}
+
+/**
+ * Makes a leg's arrival one of the player's stops, so the leg they just changed the route of stays as it
+ * is when the Journey re-plans. Otherwise a new route can tip the planner to another stop, and that leg
+ * would get a fresh suggestion.
+ */
+function keepStop(journey: Journey, stop: Stop): Journey {
+  if (stop.ident === journey.destination.ident || journey.via.some((v) => v.ident === stop.ident)) return journey
+  const ahead = journey.legs.filter((leg) => leg.status === 'planned').map((leg) => leg.to)
+  const via = ahead.filter((s) => s.ident === stop.ident || journey.via.some((v) => v.ident === s.ident))
+  return { ...journey, via, avoid: journey.avoid.filter((ident) => ident !== stop.ident) }
 }
 
 function editRadioRoute(journey: Journey, edit: Extract<RouteEdit, { kind: 'radio-skip' | 'radio-add' | 'radio-reset' }>, vors: Vor[]): Journey {
@@ -556,7 +574,7 @@ function editRadioRoute(journey: Journey, edit: Extract<RouteEdit, { kind: 'radi
   if (!leg) throw new Error(`${edit.from} to ${edit.to} isn't a leg you still have to fly.`)
   const current = (leg.vorRoute ?? []).map(refOf)
 
-  if (edit.kind === 'radio-skip') return withRadioRoute(journey, edit.from, edit.to, current.filter((_, i) => i !== edit.index))
+  if (edit.kind === 'radio-skip') return keepStop(withRadioRoute(journey, edit.from, edit.to, current.filter((_, i) => i !== edit.index)), leg.to)
 
   const ident = edit.ident.trim().toUpperCase()
   const middle = { lat: (leg.from.lat + leg.to.lat) / 2, lon: (leg.from.lon + leg.to.lon) / 2 }
@@ -583,7 +601,7 @@ function editRadioRoute(journey: Journey, edit: Extract<RouteEdit, { kind: 'radi
   }
   const stations = [...current]
   stations.splice(at, 0, refOf(station))
-  return withRadioRoute(journey, edit.from, edit.to, stations)
+  return keepStop(withRadioRoute(journey, edit.from, edit.to, stations), leg.to)
 }
 
 /** Applies one change the player made to the part of the route they haven't flown. */
