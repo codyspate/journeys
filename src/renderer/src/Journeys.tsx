@@ -233,7 +233,7 @@ function LegRow({
             {note}
           </p>
         ))}
-      {leg.status === 'planned' && <Kneeboard journeyId={journeyId} leg={leg} limits={limits} />}
+      {leg.status === 'planned' && <Kneeboard journeyId={journeyId} leg={leg} limits={limits} onEdit={editing?.onEdit} />}
       {journal?.note && <p className="leg-journal">“{journal.note}”</p>}
       {journal && journal.photoCount > 0 && (
         <p className="muted">

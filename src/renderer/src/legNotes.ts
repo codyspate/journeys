@@ -15,6 +15,7 @@ export function legNotes(leg: Leg, limits: RouteLimits): string[] {
       `Ground reaches ${feet(leg.highestTerrainFt)}, closer than ${feet(limits.terrainClearanceFt)} to the ${feet(limits.maxAltitudeFt)} you'll fly.`
     )
   }
+  if (leg.vorRouteChosen && leg.vorRoute?.length === 0) notes.push('You chose to fly this leg direct, without radio stations.')
   if (leg.vorRoute === null) notes.push('No chain of radio stations fits your limits here, so this leg is shown direct. Fly it by landmarks and heading.')
   if (leg.overWater && leg.longestWaterNm != null && limits.maxWaterNm !== null) {
     notes.push(`Crosses ${Math.round(leg.longestWaterNm)} nm of water, more than your ${limits.maxWaterNm} nm.`)

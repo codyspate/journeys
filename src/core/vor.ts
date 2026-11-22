@@ -20,6 +20,11 @@ export const vorsFromRows = (rows: VorRow[]): Vor[] =>
 
 /** The altitude reception is worked out for when the player hasn't set the highest they'll fly. */
 export const ASSUMED_ALTITUDE_FT = 6500
+/**
+ * With no highest altitude set, the player is assumed to be at least this far above any station, since
+ * nobody cruises a few hundred feet over a VOR on a high plateau.
+ */
+const ASSUMED_ABOVE_STATION_FT = 3000
 /** How far each class of station is rated to reach: VORs as published, NDBs by the FAA's classes. */
 const VOR_RANGE_NM: Record<VorClass, number> = { T: 25, L: 40, H: 130 }
 const NDB_RANGE_NM: Record<VorClass, number> = { T: 15, L: 25, H: 50 }
@@ -33,7 +38,10 @@ export const isNdb = (navaid: Pick<Vor, 'type'>) => navaid.type === 'NDB' || nav
  */
 export function receptionNm(navaid: Pick<Vor, 'type' | 'serviceClass' | 'elevationFt'>, altitudeFt: number | null): number {
   if (isNdb(navaid)) return NDB_RANGE_NM[navaid.serviceClass]
-  const above = Math.max(500, (altitudeFt ?? ASSUMED_ALTITUDE_FT) - navaid.elevationFt)
+  const above =
+    altitudeFt === null
+      ? Math.max(ASSUMED_ABOVE_STATION_FT, ASSUMED_ALTITUDE_FT - navaid.elevationFt)
+      : Math.max(500, altitudeFt - navaid.elevationFt)
   return Math.min(VOR_RANGE_NM[navaid.serviceClass], 1.23 * Math.sqrt(above))
 }
 
@@ -52,6 +60,8 @@ export interface VorRoute {
   fixes: VorFix[]
   /** Along the route, from the departure through each station to the arrival. */
   distanceNm: number
+  /** The player's own route rather than a suggestion. */
+  chosen?: boolean
 }
 
 interface Station {

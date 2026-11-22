@@ -32,7 +32,16 @@ export function currentSegment(leg: Pick<Leg, 'from' | 'to' | 'vorRoute'>, along
  * A leg's radio route as stretches to fly: what to set for each, and how far. In flight, `currentIndex`
  * marks the stretch being flown and fades the ones already done.
  */
-export function VorRouteList({ leg, currentIndex = null }: { leg: Leg; currentIndex?: number | null }) {
+export function VorRouteList({
+  leg,
+  currentIndex = null,
+  onSkip
+}: {
+  leg: Leg
+  currentIndex?: number | null
+  /** Offered when the route can be edited: leaves out the station at this index of the leg's route. */
+  onSkip?: (index: number) => void
+}) {
   const segments = routeSegments(leg)
   if (segments.length === 0) return null
   const state = (i: number) => (currentIndex === null ? undefined : i < currentIndex ? 'passed' : i === currentIndex ? 'current' : undefined)
@@ -48,7 +57,28 @@ export function VorRouteList({ leg, currentIndex = null }: { leg: Leg; currentIn
               {guidance(segment)}
               {segment.gapNm >= MENTION_GAP_NM && <span className="muted"> · about {Math.round(segment.gapNm)} nm on heading between stations</span>}
             </span>
-            <span className="vor-route-nm">{Math.round(segment.distanceNm)} nm</span>
+            <span className="vor-route-nm">
+              {Math.round(segment.distanceNm)} nm
+              {/* A station on the departure field has no stretch of its own to carry its link. */}
+              {onSkip && i === 0 && isVor(segment.from) && (
+                <button
+                  className="link"
+                  aria-label={`Leave ${segment.from.ident} out of this leg's route`}
+                  onClick={() => onSkip(leg.vorRoute!.indexOf(segment.from as VorFix))}
+                >
+                  Skip {segment.from.ident}
+                </button>
+              )}
+              {onSkip && isVor(segment.to) && (
+                <button
+                  className="link"
+                  aria-label={`Leave ${segment.to.ident} out of this leg's route`}
+                  onClick={() => onSkip(leg.vorRoute!.indexOf(segment.to as VorFix))}
+                >
+                  Skip {segment.to.ident}
+                </button>
+              )}
+            </span>
           </li>
         ))}
       </ol>

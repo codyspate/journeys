@@ -1492,3 +1492,16 @@ tr.skipped td {
   border-radius: 50%;
   background: var(--good);
 }
+
+.vor-route-nm .link {
+  margin-left: 10px;
+  font-size: 12px;
+}
+
+.radio-route-editor {
+  margin: 8px 0 4px;
+}
+
+.radio-route-editor .fields {
+  align-items: flex-end;
+}

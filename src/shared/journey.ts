@@ -192,6 +192,8 @@ export interface Leg {
    * so the leg is shown direct. Missing when radio navigation is off.
    */
   vorRoute?: VorFix[] | null
+  /** The radio route is the player's own, not the suggested one. */
+  vorRouteChosen?: boolean
   /** The arrival is a stop the player chose. */
   pinned: boolean
   confidence: 'firm' | 'tentative'
@@ -214,7 +216,23 @@ export interface Journey {
   performance: Performance
   maxLegMinutes: number
   limits: RouteLimits
+  /** Radio routes the player set for particular legs, used whenever that leg is planned. */
+  radioRoutes?: RadioRouteChoice[]
   legs: Leg[]
+}
+
+/** A station on a radio route, kept with its position since the same ident is used in more than one place. */
+export interface StationRef {
+  ident: string
+  lat: number
+  lon: number
+}
+
+/** The player's own radio route for the leg between two airports, in place of the suggested one. */
+export interface RadioRouteChoice {
+  from: string
+  to: string
+  stations: StationRef[]
 }
 
 export interface CreateJourneyInput {
@@ -236,6 +254,10 @@ export type RouteEdit =
   | { kind: 'origin'; ident: string }
   | { kind: 'destination'; ident: string }
   | { kind: 'reset' }
+  /** Changes to one leg's radio route: leave a station out, add one by its ident, or go back to the suggestion. */
+  | { kind: 'radio-skip'; from: string; to: string; index: number }
+  | { kind: 'radio-add'; from: string; to: string; ident: string }
+  | { kind: 'radio-reset'; from: string; to: string }
 
 export interface ReachChoice {
   stop: Stop

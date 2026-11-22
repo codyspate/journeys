@@ -11,13 +11,15 @@ import {
   type ReachOptions,
   type RouteEdit,
   type RouteLimits,
+  type RadioRouteChoice,
   type Stop,
+  type StationRef,
   type Vor
 } from '../shared/journey'
 import type { AirportIndex } from './airports'
 import { distanceNm } from './recorder'
 import type { Terrain } from './terrain'
-import { isNdb, VorRouter, type VorRoute } from './vor'
+import { isNdb, receptionNm, toFix, VorRouter, type VorRoute } from './vor'
 
 const EARTH_NM = 3440.065
 const SAME_PLACE_NM = 5
@@ -136,7 +138,67 @@ interface Segment {
   routes?: (VorRoute | null)[]
 }
 
-function planSegment(from: Stop, to: Stop, airports: Airport[], settings: JourneySettings, terrain?: Terrain, vors?: Vor[]): Segment {
+/** Within this of where a station was chosen counts as the same station. */
+const SAME_STATION_DEG = 0.02
+
+const sameStation = (vor: Vor, ref: StationRef) =>
+  vor.ident === ref.ident && Math.abs(vor.lat - ref.lat) < SAME_STATION_DEG && Math.abs(vor.lon - ref.lon) < SAME_STATION_DEG
+
+/** The player's chosen stations as a route. Stations no longer in the data are left out. */
+function chosenRoute(from: Stop, to: Stop, choice: RadioRouteChoice, vors: Vor[], altitudeFt: number | null): VorRoute {
+  const stations = choice.stations.flatMap((ref) => vors.find((vor) => sameStation(vor, ref)) ?? [])
+  const fixes = stations.map((vor) => toFix(vor, receptionNm(vor, altitudeFt)))
+  const points = [from, ...fixes, to]
+  const distanceNm = points.slice(1).reduce((sum, p, i) => sum + between(points[i], p), 0)
+  return { fixes, distanceNm, chosen: true }
+}
+
+/** How wide, either side, a stretch is searched again when the usual corridor leaves a leg too long to fly. */
+const WIDE_CORRIDOR_NM = 900
+
+/**
+ * Plans between two points in a corridor along the direct line. Where that leaves a hop longer than the
+ * aircraft can fly, such as an ocean crossing, that stretch is planned again across a much wider area,
+ * so island chains well off the line (Greenland and Iceland, say) can break it up.
+ */
+function planSegment(
+  from: Stop,
+  to: Stop,
+  airports: Airport[],
+  settings: JourneySettings,
+  terrain?: Terrain,
+  vors?: Vor[],
+  radioRoutes: RadioRouteChoice[] = []
+): Segment {
+  const limit = maxLegNm(settings)
+  const first = planCorridor(from, to, airports, settings, corridorWidth(limit), terrain, vors, radioRoutes)
+  const points = [from, ...first.stops, to]
+  const stops: Stop[] = []
+  const routes: (VorRoute | null)[] = []
+  for (let i = 0; i < points.length - 1; i++) {
+    const [a, b] = [points[i], points[i + 1]]
+    let part: Segment = { stops: [], routes: first.routes ? [first.routes[i]] : undefined }
+    if (between(a, b) > limit + 0.5) {
+      const wider = planCorridor(a, b, airports, settings, WIDE_CORRIDOR_NM, terrain, vors, radioRoutes)
+      const longest = (s: Segment) => Math.max(...[a, ...s.stops, b].slice(1).map((p, k) => between([a, ...s.stops][k], p)))
+      if (wider.stops.length > 0 && longest(wider) < between(a, b)) part = wider
+    }
+    stops.push(...part.stops, ...(i < points.length - 2 ? [b] : []))
+    if (part.routes) routes.push(...part.routes)
+  }
+  return first.routes ? { stops, routes } : { stops }
+}
+
+function planCorridor(
+  from: Stop,
+  to: Stop,
+  airports: Airport[],
+  settings: JourneySettings,
+  width: number,
+  terrain?: Terrain,
+  vors?: Vor[],
+  radioRoutes: RadioRouteChoice[] = []
+): Segment {
   const { performance, limits } = settings
   const limit = maxLegNm(settings)
   const total = distanceNm(from.lat, from.lon, to.lat, to.lon)
@@ -171,7 +233,6 @@ function planSegment(from: Stop, to: Stop, airports: Airport[], settings: Journe
     const over = Math.max(0, highestFt - giveUp.aboveFt) / FEET_PER_STOP + Math.max(0, longestWaterNm - giveUp.waterNm) / WATER_NM_PER_STOP
     return remember(cache.excess, key, over)
   }
-  const width = corridorWidth(limit)
   // Terminal NDBs are compass locators for approaches, too weak to navigate between.
   const stations =
     limits.vorRoutes && vors ? vorsNear(from, to, vors.filter((v) => (isNdb(v) ? limits.useNdbs && v.serviceClass !== 'T' : true)), width + limits.maxRadioGapNm) : []
@@ -186,12 +247,17 @@ function planSegment(from: Stop, to: Stop, airports: Airport[], settings: Journe
   const router = limits.vorRoutes && vors ? routerFor(limit) : null
   // Further out, only for drawing a route to a stop the player chose that's past the longest leg.
   let further: VorRouter | null = null
-  const routeFor = (a: Stop, b: Stop) => router && (router.route(a, b) ?? (further ??= routerFor(limit * 1.5)).route(a, b))
+  // A leg the player gave their own radio route to keeps it.
+  const legRoute = (a: Stop, b: Stop) => {
+    const choice = radioRoutes.find((c) => c.from === a.ident && c.to === b.ident)
+    return choice && vors ? chosenRoute(a, b, choice, vors, limits.maxAltitudeFt) : router!.route(a, b)
+  }
+  const routeFor = (a: Stop, b: Stop) => router && (legRoute(a, b) ?? (further ??= routerFor(limit * 1.5)).route(a, b))
   const withRoutes = (stops: Stop[]): Segment =>
     router ? { stops, routes: [from, ...stops].map((stop, i) => routeFor(stop, [...stops, to][i])) } : { stops }
 
   if (router) {
-    const direct = router.route(from, to)
+    const direct = legRoute(from, to)
     if (direct && direct.distanceNm <= limit) return { stops: [], routes: [direct] }
   } else if (total <= limit && (!checksTerrain || !breaksLimits(from, to))) return { stops: [] }
 
@@ -227,7 +293,7 @@ function planSegment(from: Stop, to: Stop, airports: Airport[], settings: Journe
         }
         let edge = 2 * GAP_COST + legCost(d)
         if (d <= limit && cost[j] + 1 + nodes[i].quality * 0.2 < cost[i]) {
-          const routed = router.route(nodes[j].stop, nodes[i].stop)
+          const routed = legRoute(nodes[j].stop, nodes[i].stop)
           if (routed && routed.distanceNm <= limit) edge = legCost(routed.distanceNm)
         }
         if (cost[j] + edge < cost[i]) {
@@ -298,6 +364,7 @@ function buildLeg(
     belowMinimum: limits.minLegNm !== null && distance < limits.minLegNm - 0.5,
     ...(route ? routeConditions(from, to, route, settings, terrain) : legConditions(from, to, settings, terrain)),
     ...(route !== undefined && { vorRoute: route ? route.fixes : null }),
+    ...(route?.chosen && { vorRouteChosen: true }),
     pinned,
     confidence: index < FIRM_LEGS ? 'firm' : 'tentative',
     flightId: null,
@@ -321,7 +388,7 @@ export function reflow(journey: Journey, airports: Airport[], terrain?: Terrain,
   const planned: Leg[] = []
   let from = start
   for (const target of targets) {
-    const segment = planSegment(from, target, choices, settings, terrain, vors)
+    const segment = planSegment(from, target, choices, settings, terrain, vors, journey.radioRoutes)
     const stops = [...segment.stops, target]
     stops.forEach((stop, i) => {
       planned.push(buildLeg(from, stop, settings, terrain, stop === target, planned.length, segment.routes?.[i]))
@@ -401,7 +468,8 @@ export function updateSettings(journey: Journey, settings: JourneySettings, airp
   return reflow({ ...journey, ...checkSettings(settings) }, airports, terrain, vors)
 }
 
-const between = (a: Stop, b: Stop) => distanceNm(a.lat, a.lon, b.lat, b.lon)
+type Point = Pick<Stop, 'lat' | 'lon'>
+const between = (a: Point, b: Point) => distanceNm(a.lat, a.lon, b.lat, b.lon)
 
 /** Adds a chosen stop where it costs the least extra distance, keeping the player's order. */
 export function addVia(journey: Journey, stop: Stop, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey {
@@ -471,9 +539,59 @@ function requireNewStop(journey: Journey, stop: Stop): void {
   if (stop.ident === currentStop(journey).ident) throw new Error(`You're already at ${stop.ident}.`)
 }
 
+/** How far from a leg a station named by the player is looked for. */
+const ADD_STATION_WITHIN_NM = 300
+
+const refOf = ({ ident, lat, lon }: StationRef): StationRef => ({ ident, lat, lon })
+
+/** Sets, or with null clears, the player's own radio route for one leg. */
+function withRadioRoute(journey: Journey, from: string, to: string, stations: StationRef[] | null): Journey {
+  const others = (journey.radioRoutes ?? []).filter((c) => !(c.from === from && c.to === to))
+  return { ...journey, radioRoutes: stations ? [...others, { from, to, stations }] : others }
+}
+
+function editRadioRoute(journey: Journey, edit: Extract<RouteEdit, { kind: 'radio-skip' | 'radio-add' | 'radio-reset' }>, vors: Vor[]): Journey {
+  if (edit.kind === 'radio-reset') return withRadioRoute(journey, edit.from, edit.to, null)
+  const leg = journey.legs.find((l) => l.status === 'planned' && l.from.ident === edit.from && l.to.ident === edit.to)
+  if (!leg) throw new Error(`${edit.from} to ${edit.to} isn't a leg you still have to fly.`)
+  const current = (leg.vorRoute ?? []).map(refOf)
+
+  if (edit.kind === 'radio-skip') return withRadioRoute(journey, edit.from, edit.to, current.filter((_, i) => i !== edit.index))
+
+  const ident = edit.ident.trim().toUpperCase()
+  const middle = { lat: (leg.from.lat + leg.to.lat) / 2, lon: (leg.from.lon + leg.to.lon) / 2 }
+  const allowed = vors.filter((v) => v.ident === ident && (journey.limits.useNdbs || !isNdb(v)))
+  const station = allowed
+    .map((v) => ({ v, nm: between(middle, v) }))
+    .filter((c) => c.nm <= ADD_STATION_WITHIN_NM + between(leg.from, leg.to) / 2)
+    .sort((a, b) => a.nm - b.nm)[0]?.v
+  if (!station) {
+    const ndbOnly = vors.some((v) => v.ident === ident && isNdb(v)) && !journey.limits.useNdbs
+    throw new Error(ndbOnly ? `${ident} is an NDB. Turn on "Use NDBs too" to add it.` : `Couldn't find a station called ${ident} near this leg.`)
+  }
+  if (current.some((ref) => sameStation(station, ref))) throw new Error(`${ident} is already on this leg's route.`)
+  // Where it adds the least distance, keeping the stations already chosen in order.
+  const points: StationRef[] = [leg.from, ...current, leg.to]
+  let at = 0
+  let least = Infinity
+  for (let i = 0; i < points.length - 1; i++) {
+    const added = between(points[i], station) + between(station, points[i + 1]) - between(points[i], points[i + 1])
+    if (added < least) {
+      least = added
+      at = i
+    }
+  }
+  const stations = [...current]
+  stations.splice(at, 0, refOf(station))
+  return withRadioRoute(journey, edit.from, edit.to, stations)
+}
+
 /** Applies one change the player made to the part of the route they haven't flown. */
 export function editRoute(journey: Journey, edit: RouteEdit, index: AirportIndex, terrain?: Terrain, vors?: Vor[]): Journey {
   const airports = index.all
+  if (edit.kind === 'radio-skip' || edit.kind === 'radio-add' || edit.kind === 'radio-reset') {
+    return reflow(editRadioRoute(journey, edit, vors ?? []), airports, terrain, vors)
+  }
   if (edit.kind === 'reset') return reflow({ ...journey, via: [], avoid: [] }, airports, terrain, vors)
   if (edit.kind === 'remove') return removeVia(journey, edit.ident, airports, terrain, vors)
   if (edit.kind === 'move') return moveStop(journey, edit.ident, edit.offset, airports, terrain, vors)

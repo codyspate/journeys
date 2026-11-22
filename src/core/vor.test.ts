@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { NO_LIMITS, PERFORMANCE_PRESETS, type RouteLimits, type Stop, type Vor } from '../shared/journey'
 import { AirportIndex, airportsFromRows, type AirportRow } from './airports'
-import { createJourney, maxLegNm, settingsOf } from './planner'
+import { createJourney, editRoute, maxLegNm, settingsOf, updateSettings } from './planner'
 import { distanceNm } from './recorder'
 import { TerrainGrid } from './terrain'
 import { receptionNm, type VorRow, VorRouter, vorsFromRows } from './vor'
@@ -45,8 +45,9 @@ describe('receptionNm', () => {
     expect(receptionNm(at('H'), 17_500)).toBe(130)
     // From a station on a 5,000 ft mesa, 9,500 ft is only 4,500 ft above it.
     expect(receptionNm(at('H', 'VOR', 5000), 9500)).toBeCloseTo(83, 0)
-    // Blank means the assumed 6,500 ft.
+    // Blank means the assumed 6,500 ft, but never less than 3,000 ft above a station on high ground.
     expect(receptionNm(at('H'), null)).toBeCloseTo(99, 0)
+    expect(receptionNm(at('H', 'VOR', 6112), null)).toBeCloseTo(67, 0)
   })
 
   it('gives NDBs their rated range whatever the altitude', () => {
@@ -174,6 +175,64 @@ describe('planning with radio navigation', () => {
     const strict = plan('YSSY', 'YPPH', { maxRadioGapNm: 0, maxAltitudeFt: 3000 })
     const relaxed = plan('YSSY', 'YPPH', { maxRadioGapNm: 30, maxAltitudeFt: 9500 })
     expect(routed(relaxed)).toBeGreaterThan(routed(strict))
+  })
+
+  it('crosses an ocean by island-hopping well off the direct line rather than flying a leg too long', () => {
+    const journey = createJourney(
+      {
+        name: '',
+        originIdent: 'MMLO',
+        destinationIdent: 'EDGB',
+        performance: PERFORMANCE_PRESETS[0],
+        maxLegMinutes: 240,
+        limits: { ...NO_LIMITS, vorRoutes: true }
+      },
+      index,
+      'j',
+      0,
+      world,
+      vors
+    )
+    const limit = maxLegNm(settingsOf(journey))
+    for (const leg of journey.legs) expect(Math.round(leg.distanceNm)).toBeLessThanOrEqual(Math.ceil(limit))
+    expect(journey.legs.some((leg) => leg.to.ident.startsWith('BG') || leg.to.ident.startsWith('BI'))).toBe(true)
+  }, 120_000)
+
+  describe("the player's own radio route", () => {
+    const journey = plan('KSAN', 'KBOS')
+    const first = journey.legs[0]
+    const pair = { from: first.from.ident, to: first.to.ident }
+    const idents = (j: typeof journey) => j.legs[0].vorRoute?.map((f) => f.ident)
+    const apply = (j: typeof journey, change: Parameters<typeof editRoute>[1]) => editRoute(j, change, index, world, vors)
+
+    it('skips a station, and keeps the change through re-planning', () => {
+      const skipped = apply(journey, { kind: 'radio-skip', ...pair, index: 0 })
+      expect(idents(skipped)).toEqual(first.vorRoute!.slice(1).map((f) => f.ident))
+      expect(skipped.legs[0].vorRouteChosen).toBe(true)
+      const replanned = updateSettings(skipped, { ...settingsOf(skipped), maxLegMinutes: skipped.maxLegMinutes }, index.all, world, vors)
+      expect(idents(replanned)).toEqual(idents(skipped))
+    })
+
+    it('adds a station by its ident where it adds the least distance, and goes back to the suggestion', () => {
+      const skipped = apply(journey, { kind: 'radio-skip', ...pair, index: 0 })
+      const back = apply(skipped, { kind: 'radio-add', ...pair, ident: first.vorRoute![0].ident.toLowerCase() })
+      expect(idents(back)).toEqual(idents(journey))
+      const reset = apply(skipped, { kind: 'radio-reset', ...pair })
+      expect(idents(reset)).toEqual(idents(journey))
+      expect(reset.legs[0].vorRouteChosen).toBeUndefined()
+    })
+
+    it('can be flown direct by skipping every station', () => {
+      let direct = journey
+      while (direct.legs[0].vorRoute!.length > 0) direct = apply(direct, { kind: 'radio-skip', ...pair, index: 0 })
+      expect(direct.legs[0].vorRouteChosen).toBe(true)
+      expect(direct.legs[0].distanceNm).toBeCloseTo(distanceNm(first.from.lat, first.from.lon, first.to.lat, first.to.lon), 3)
+    })
+
+    it('says why a station cannot be added', () => {
+      expect(() => apply(journey, { kind: 'radio-add', ...pair, ident: 'ZZZZ' })).toThrow("Couldn't find a station called ZZZZ")
+      expect(() => apply(journey, { kind: 'radio-add', ...pair, ident: first.vorRoute![0].ident })).toThrow('already on this leg')
+    })
   })
 
   it('leaves legs without routes when it is off', () => {
