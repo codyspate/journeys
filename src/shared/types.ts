@@ -1,4 +1,5 @@
 import type { LegBrief } from './brief'
+import type { JourneySummary } from './summary'
 import type { AirframeRecord, AirframeSave, LiveSim, RestoreOffer, Settings, UntrackedFlight } from './airframe'
 import type { Airport, CreateJourneyInput, Journey, JourneySettings, Place, PlaceKind, ReachOptions, RouteEdit, TopOfDescent } from './journey'
 import type { AircraftFlight, Atlas, FlightJournal, FlightPhoto, LogbookFlight, PhotoSettings, TrackPoint } from './logbook'
@@ -123,6 +124,8 @@ export interface JourneysApi {
   listJourneys(): Promise<Journey[]>
   /** A planned leg's kneeboard, with the wind at the aircraft now if the sim is running. */
   legBrief(journeyId: string, legId: string): Promise<LegBrief>
+  /** A finished Journey looked back on: totals, highlights and a few lighter comparisons. */
+  journeySummary(journeyId: string): Promise<JourneySummary>
   /** Whether AI assistants can connect right now, and what an MCP client needs to start the Journeys server. */
   assistantSetup(): Promise<{ running: boolean; script: string; node: string; userData: string }>
   /** Asks where to save, then writes a dated backup folder there. null if the player cancels. */

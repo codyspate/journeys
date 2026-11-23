@@ -89,7 +89,7 @@ export class JourneyService {
       .map((row) => parseJourney(row.data))
   }
 
-  private get(id: string): Journey {
+  get(id: string): Journey {
     const row = this.db.prepare('SELECT data FROM journeys WHERE id = ?').get(id)
     if (!row) throw new Error('That Journey no longer exists.')
     return parseJourney(row.data)

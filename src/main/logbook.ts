@@ -57,6 +57,15 @@ export class Logbook {
     return rows.map((row) => JSON.parse(String(row.data)) as LogbookFlight)
   }
 
+  /** The flights with these ids, skipping any no longer in the logbook. */
+  flightsByIds(ids: string[]): LogbookFlight[] {
+    const find = this.db.prepare('SELECT data FROM flights WHERE id = ?')
+    return ids.flatMap((id) => {
+      const row = find.get(id)
+      return row ? [JSON.parse(String(row.data)) as LogbookFlight] : []
+    })
+  }
+
   /** The recorded path of a flight, thinned to at most `maxPoints` so long flights stay quick to draw. */
   track(flightId: string, maxPoints = 4000): TrackPoint[] {
     const rows = this.db.prepare('SELECT data FROM samples WHERE flight_id = ? ORDER BY t').all(flightId)

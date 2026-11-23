@@ -12,6 +12,7 @@ import {
 import type { FlightJournal } from '../../shared/logbook'
 import { errorText } from './errors'
 import { JourneyMap } from './JourneyMap'
+import { JourneySummaryCard, useJourneySummary } from './JourneySummaryCard'
 import { currentJourney, hoursMinutes } from './homeState'
 import { Kneeboard } from './Kneeboard'
 import { LegStats } from './LegParts'
@@ -336,6 +337,7 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
         }
       : null
 
+  const summary = useJourneySummary(selected ?? null)
   const planned = selected?.legs.filter((leg) => leg.status === 'planned') ?? []
   const canChangeOrigin = selected?.status === 'active' && selected.legs.every((leg) => leg.status === 'planned')
   const remainingNm = planned.reduce((sum, leg) => sum + leg.distanceNm, 0)
@@ -393,10 +395,16 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
                   setSelectedId(null)
                 }}
               />
-              <p className="muted">
-                {selected.performance.name} · {planned.length} legs left · {Math.round(remainingNm)} nm ·{' '}
-                {hoursMinutes(remainingMinutes)} at cruise, still air
-              </p>
+              {selected.status === 'complete' ? (
+                <p className="muted">
+                  {selected.performance.name} · complete · {selected.legs.length} {selected.legs.length === 1 ? 'leg' : 'legs'} flown
+                </p>
+              ) : (
+                <p className="muted">
+                  {selected.performance.name} · {planned.length} legs left · {Math.round(remainingNm)} nm ·{' '}
+                  {hoursMinutes(remainingMinutes)} at cruise, still air
+                </p>
+              )}
             </div>
 
             <div className="journey-map-area">
@@ -408,6 +416,7 @@ export function Journeys({ request = null, onHandled }: { request?: JourneyReque
             </div>
 
             <div className="journey-plan">
+            {summary && selected.status === 'complete' && <JourneySummaryCard journey={selected} summary={summary} />}
             {canChangeOrigin && (
               <div className="leg">
                 <div>

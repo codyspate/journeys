@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron'
 import { AirframeTracker } from '../core/airframes'
 import { checkDescent, DescentWatcher } from '../core/descent'
+import { journeySummary } from '../core/journeySummary'
 import { FlightRecorder, hasPosition } from '../core/recorder'
 import { DEFAULT_TIMING } from '../core/restore'
 import { awayFromHome, FlightGate, type Home } from '../core/tracking'
@@ -135,6 +136,15 @@ void app.whenReady().then(() => {
     const sample = sim.status.connected && lastSample && Date.now() - lastSample.t < 60_000 ? lastSample : null
     const wind = sample ? { fromTrue: sample.windDirTrue, kts: sample.windKts } : null
     return journeys.brief(journeyId, legId, wind)
+  })
+  ipcMain.handle('journeys:summary', (_event, journeyId: string) => {
+    const journey = journeys.get(journeyId)
+    const ids = journey.legs.flatMap((leg) => (leg.flightId ? [leg.flightId] : []))
+    return journeySummary(journey, {
+      flights: new Map(logbook.flightsByIds(ids).map((flight) => [flight.id, flight])),
+      countryOf: (ident) => journeys.airports.get(ident)?.country ?? null,
+      journals: journal.journals(ids)
+    })
   })
   ipcMain.handle('journeys:list', () => journeys.list())
   ipcMain.handle('journeys:create', (_event, input: CreateJourneyInput) => journeys.create(input))

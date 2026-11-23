@@ -28,6 +28,7 @@ const api: JourneysApi = {
   listAirports: () => ipcRenderer.invoke('airports:all'),
   listJourneys: () => ipcRenderer.invoke('journeys:list'),
   legBrief: (journeyId, legId) => ipcRenderer.invoke('journeys:brief', journeyId, legId),
+  journeySummary: (journeyId) => ipcRenderer.invoke('journeys:summary', journeyId),
   assistantSetup: () => ipcRenderer.invoke('assistant:setup'),
   writeBackup: () => ipcRenderer.invoke('backup:write'),
   chooseBackup: () => ipcRenderer.invoke('backup:choose'),

@@ -8,6 +8,7 @@ import { FlightPanel } from './FlightPanel'
 import { type HomeMode, homeMode } from './flightProgress'
 import { aircraftLabels, currentJourney, progressOf, type Readiness, readiness } from './homeState'
 import { AirportInput, type JourneyRequest } from './Journeys'
+import { JourneySummaryCard, useJourneySummary } from './JourneySummaryCard'
 import { Kneeboard } from './Kneeboard'
 import { LegHeading, LegStats, useDescentSettings } from './LegParts'
 import { LiveFlightMap } from './LiveFlightMap'
@@ -239,6 +240,7 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
   const [places, setPlaces] = useState<Place[]>([])
   const [airframes, setAirframes] = useState<AirframeRecord[]>([])
   const [lastFlight, setLastFlight] = useState<LogbookFlight | null>(null)
+  const [lastLandedId, setLastLandedId] = useState<string | null>(null)
   const [live, setLive] = useState<LiveSim>(OFFLINE)
   const [reach, setReach] = useState<ReachOptions | null>(null)
   // The player can step out of the flight view or briefing to the overview, until the situation changes.
@@ -249,7 +251,10 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
     void window.journeys.listJourneys().then(setJourneys)
     void window.journeys.listAirframes().then(setAirframes)
     void window.journeys.listPlaces?.().then(setPlaces)
-    void window.journeys.listFlights().then((flights) => setLastFlight(flights.find((f) => f.status !== 'in-progress') ?? null))
+    void window.journeys.listFlights().then((flights) => {
+      setLastFlight(flights.find((f) => f.status !== 'in-progress') ?? null)
+      setLastLandedId(flights.find((f) => f.status === 'complete')?.id ?? null)
+    })
     // Optional so a window reloaded during development against an older background process still works.
     void window.journeys.liveSim?.().then(setLive)
   }, [])
@@ -338,6 +343,7 @@ export function Home({ onJourney, onOpenHangar, onOpenLogbook }: HomeProps) {
               wanted={wanted}
               from={from}
               lastFlight={lastFlight}
+              lastLandedId={lastLandedId}
               onPlan={plan}
               onJourney={onJourney}
               onPlacesChanged={load}
@@ -363,6 +369,7 @@ function Overview({
   wanted,
   from,
   lastFlight,
+  lastLandedId,
   onPlan,
   onJourney,
   onPlacesChanged,
@@ -379,14 +386,22 @@ function Overview({
   wanted: Place[]
   from: string | undefined
   lastFlight: LogbookFlight | null
+  /** The latest flight that ended in a landing, which may have finished a Journey. */
+  lastLandedId: string | null
   onPlan: (to?: string) => void
   onJourney: (request: JourneyRequest) => void
   onPlacesChanged: () => void
   onOpenHangar: () => void
   onOpenLogbook: () => void
 }) {
+  // The Journey the last landing brought to an end, until another flight lands somewhere.
+  const finished = (lastLandedId && journeys?.find((j) => j.status === 'complete' && j.legs.at(-1)?.flightId === lastLandedId)) || null
+  const summary = useJourneySummary(finished)
   return (
     <>
+      {finished && summary && (
+        <JourneySummaryCard journey={finished} summary={summary} onOpen={() => onJourney({ kind: 'open', id: finished.id })} />
+      )}
       {journeys && !journey && (
         <article className="card next-leg">
           <p className="eyebrow">Next leg</p>
