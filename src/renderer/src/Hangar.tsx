@@ -58,12 +58,15 @@ function History({
   loaded,
   busy,
   onRestore,
+  onCurrentChanged,
   refreshKey
 }: {
   record: AirframeRecord
   loaded: boolean
   busy: boolean
   onRestore: (saveId: string) => void
+  /** Deleting the newest save moves the aircraft back to the one before; null when none are left. */
+  onCurrentChanged: (record: AirframeRecord | null) => void
   refreshKey: number
 }) {
   const [saves, setSaves] = useState<AirframeSave[] | null>(null)
@@ -97,8 +100,9 @@ function History({
                 setSaves((all) => all?.map((s) => (s.id === renamed.id ? renamed : s)) ?? null)
               }}
               onDelete={async () => {
-                await window.journeys.deleteAirframeSave(save.id)
+                const current = await window.journeys.deleteAirframeSave(save.id)
                 setSaves((all) => all?.filter((s) => s.id !== save.id) ?? null)
+                if (current?.snapshot.capturedAt !== record.snapshot.capturedAt) onCurrentChanged(current)
               }}
             />
           </div>
@@ -215,7 +219,14 @@ function AircraftCard({
       {showHistory && (
         <div className="history-panel">
           <RestoreChoices options={options} onChange={setOptions} />
-          <History record={record} loaded={loaded} busy={busy !== null} onRestore={restore} refreshKey={historyVersion} />
+          <History
+            record={record}
+            loaded={loaded}
+            busy={busy !== null}
+            onRestore={restore}
+            onCurrentChanged={(current) => (current ? onChanged(current) : onDeleted())}
+            refreshKey={historyVersion}
+          />
         </div>
       )}
     </li>

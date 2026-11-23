@@ -172,7 +172,8 @@ export interface JourneysApi {
   /** Restores the aircraft's current save, or one from its history. */
   restoreAirframe(key: string, saveId: string | null, options: RestoreOptions | null): Promise<RestoreReport>
   renameAirframeSave(id: string, name: string): Promise<AirframeSave>
-  deleteAirframeSave(id: string): Promise<void>
+  /** Returns the aircraft as it now stands, or null once it has no saves left. */
+  deleteAirframeSave(id: string): Promise<AirframeRecord | null>
   getSettings(): Promise<Settings>
   updateSettings(changes: Partial<Settings>): Promise<Settings>
   getOffer(): Promise<RestoreOffer | null>

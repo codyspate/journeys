@@ -149,9 +149,36 @@ export class AirframeDatabase implements AirframeStore {
     return renamed
   }
 
-  deleteSave(id: string): void {
-    this.getSave(id)
+  /** Returns the aircraft as it now stands: back at its newest remaining save if this was the current one. */
+  deleteSave(id: string): { key: string; wasCurrent: boolean; record: AirframeRecord | null } {
+    const entry = this.getSave(id)
+    const wasCurrent = this.get(entry.key)?.snapshot.capturedAt === entry.snapshot.capturedAt
     this.db.prepare('DELETE FROM airframe_saves WHERE id = ?').run(id)
+    this.followHistory(entry.key)
+    return { key: entry.key, wasCurrent, record: this.get(entry.key) }
+  }
+
+  /**
+   * A deleted flight took the aircraft somewhere it no longer went: forgets where it was parked from then on, so
+   * it's back where it was before that flight. Manual saves stay.
+   */
+  forgetParkedSince(key: string, since: number): void {
+    this.db.prepare(`DELETE FROM airframe_saves WHERE key = ? AND kind = 'parked' AND saved_at >= ?`).run(key, new Date(since).toISOString())
+    this.followHistory(key)
+  }
+
+  /**
+   * The current save is always one of the aircraft's history entries. When that entry is gone, the newest one left
+   * takes over. With none left, the aircraft is only known from the logbook.
+   */
+  private followHistory(key: string): void {
+    const record = this.get(key)
+    if (!record) return
+    const history = this.history(key)
+    if (history.some((entry) => entry.snapshot.capturedAt === record.snapshot.capturedAt)) return
+    const newest = history[0]
+    if (newest) this.write({ key, snapshot: { ...newest.snapshot, id: record.snapshot.id }, location: newest.location, nickname: record.nickname })
+    else this.db.prepare('DELETE FROM airframes WHERE key = ?').run(key)
   }
 
   /**

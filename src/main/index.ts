@@ -8,7 +8,7 @@ import { journeySummary } from '../core/journeySummary'
 import { FlightRecorder, hasPosition } from '../core/recorder'
 import { DEFAULT_TIMING } from '../core/restore'
 import { awayFromHome, FlightGate, type Home } from '../core/tracking'
-import { type LiveSim, type RestoreOffer, type Settings, splitAirframeKey, type UntrackedFlight } from '../shared/airframe'
+import { airframeKey, type LiveSim, type RestoreOffer, type Settings, splitAirframeKey, type UntrackedFlight } from '../shared/airframe'
 import { type Airport, type CreateJourneyInput, DEFAULT_DESCENT, type DescentSettings, type JourneySettings, type PlaceKind, type RouteEdit } from '../shared/journey'
 import {
   type AircraftFlight,
@@ -91,6 +91,13 @@ void app.whenReady().then(() => {
     const flight = logbook.flightsByIds([flightId])[0]
     if (!flight) return
     if (flight.status === 'in-progress') throw new Error("This flight is still being recorded. Delete it once it's finished.")
+    // The aircraft's latest flight moved it: without that flight, it's back where it set off from.
+    const aircraft = flight.aircraft
+    if (aircraft && logbook.flightsFor(aircraft.title, aircraft.livery, 1)[0]?.id === flightId) {
+      const key = airframeKey(aircraft.title, aircraft.livery)
+      airframes.forgetParkedSince(key, flight.takeoffAt ?? flight.startedAt)
+      tracker.forget(key)
+    }
     logbook.deleteFlight(flightId)
     journal.forgetFlight(flightId)
     for (const journey of journeys.forgetFlight(flightId)) if (!window.isDestroyed()) window.webContents.send('journey:updated', journey)
@@ -262,7 +269,12 @@ void app.whenReady().then(() => {
     return tracker.restoreNow(key, snapshot, options ?? undefined)
   })
   ipcMain.handle('airframes:renameSave', (_event, id: string, name: string) => airframes.renameSave(id, name))
-  ipcMain.handle('airframes:deleteSave', (_event, id: string) => airframes.deleteSave(id))
+  ipcMain.handle('airframes:deleteSave', (_event, id: string) => {
+    const { key, wasCurrent, record } = airframes.deleteSave(id)
+    // Otherwise the next automatic save, with the aircraft still sitting there, would bring it straight back.
+    if (wasCurrent) tracker.forget(key)
+    return record
+  })
 
   ipcMain.handle('backup:write', async () => {
     const picked = await dialog.showOpenDialog(window, { title: 'Choose where to save the backup', properties: ['openDirectory', 'createDirectory'] })

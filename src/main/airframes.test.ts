@@ -98,3 +98,28 @@ describe('aircraft save history', () => {
     expect(db.history(KEY)).toHaveLength(1)
   })
 })
+
+describe('where an aircraft is after deleting', () => {
+  const latOf = () => db.get(KEY)!.snapshot.values['position.latitude']
+
+  it('goes back to the newest remaining save when the current one is deleted', () => {
+    db.save(KEY, snapshot(38.49, -121.1))
+    db.save(KEY, snapshot(38.51, -121.49))
+    const result = db.deleteSave(db.history(KEY)[0].id)
+    expect(result).toMatchObject({ key: KEY, wasCurrent: true })
+    expect(result.record?.location?.ident).toBe('KRIU')
+    expect(latOf()).toBe(38.49)
+    // With no saves left, the aircraft is only known from the logbook.
+    expect(db.deleteSave(db.history(KEY)[0].id).record).toBeNull()
+  })
+
+  it('forgets parking spots from a deleted flight onwards, keeping manual saves', () => {
+    db.save(KEY, snapshot(38.49, -121.1))
+    const takeoff = Date.parse(snapshot(0, 0).capturedAt)
+    db.saveManual(KEY, snapshot(38.51, -121.49), 'Mid-flight')
+    db.save(KEY, snapshot(40, -120))
+    db.forgetParkedSince(KEY, takeoff)
+    expect(db.history(KEY).map((s) => s.name)).toEqual(['Mid-flight', 'Parked at KRIU'])
+    expect(latOf()).toBe(38.51)
+  })
+})
