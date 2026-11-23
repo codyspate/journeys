@@ -87,6 +87,14 @@ void app.whenReady().then(() => {
   const logbook = new Logbook(join(app.getPath('userData'), 'logbook.db'))
   const recorder = new FlightRecorder(randomUUID)
   ipcMain.handle('logbook:list', () => logbook.listFlights())
+  ipcMain.handle('logbook:delete', (_event, flightId: string) => {
+    const flight = logbook.flightsByIds([flightId])[0]
+    if (!flight) return
+    if (flight.status === 'in-progress') throw new Error("This flight is still being recorded. Delete it once it's finished.")
+    logbook.deleteFlight(flightId)
+    journal.forgetFlight(flightId)
+    for (const journey of journeys.forgetFlight(flightId)) if (!window.isDestroyed()) window.webContents.send('journey:updated', journey)
+  })
   ipcMain.handle('logbook:track', (_event, flightId: string) => logbook.track(flightId))
 
   const journal = new FlightJournalStore(join(app.getPath('userData'), 'logbook.db'), join(app.getPath('userData'), 'photos'))

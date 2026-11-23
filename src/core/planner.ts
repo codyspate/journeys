@@ -670,6 +670,20 @@ export function applyFlight(journey: Journey, flight: LogbookFlight, index: Airp
   return reflow({ ...journey, legs, via }, index.all, terrain, vors)
 }
 
+/**
+ * Takes a deleted logbook flight off the Journey. The latest flown leg is undone and the rest re-planned from where
+ * it started; an earlier one stays on the route, since later legs set off from where it ended, but no longer points
+ * at the flight. null when the flight wasn't a leg of this Journey.
+ */
+export function withoutFlight(journey: Journey, flightId: string, airports: Airport[], terrain?: Terrain, vors?: Vor[]): Journey | null {
+  const index = journey.legs.findIndex((leg) => leg.flightId === flightId)
+  if (index < 0) return null
+  const lastFlown = journey.legs.findLastIndex((leg) => leg.status === 'flown')
+  if (index !== lastFlown) return { ...journey, legs: journey.legs.map((leg, i) => (i === index ? { ...leg, flightId: null } : leg)) }
+  const legs = journey.legs.filter((leg) => leg.status === 'flown' && leg.flightId !== flightId)
+  return reflow({ ...journey, legs }, airports, terrain, vors)
+}
+
 export interface ReachInput {
   lat: number
   lon: number

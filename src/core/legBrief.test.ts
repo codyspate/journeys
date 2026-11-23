@@ -79,7 +79,7 @@ describe('legBrief', () => {
   const to = field('BBB', 0, 1, [{ ends: ['09', '27'], headingTrue: 90, lengthFt: 4000, hardSurface: true }])
   const index = new AirportIndex([from, to])
   const journey = createJourney(
-    { name: '', originIdent: 'AAA', destinationIdent: 'BBB', performance: { ...PERFORMANCE_PRESETS[1], cruiseKts: 120, burnGph: 10 }, maxLegMinutes: 240 },
+    { name: '', originIdent: 'AAA', destinationIdent: 'BBB', performance: { ...PERFORMANCE_PRESETS.find((p) => p.name === 'Cessna 172')!, cruiseKts: 120, burnGph: 10 }, maxLegMinutes: 240 },
     index,
     'j',
     0
@@ -130,7 +130,7 @@ describe('legBrief', () => {
         name: '',
         originIdent: 'KSAN',
         destinationIdent: 'KBOS',
-        performance: PERFORMANCE_PRESETS[1],
+        performance: PERFORMANCE_PRESETS.find((p) => p.name === 'Cessna 172')!,
         maxLegMinutes: 240,
         limits: { ...NO_LIMITS, vorRoutes: true }
       },

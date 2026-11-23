@@ -104,6 +104,8 @@ export interface JourneysApi {
   resumeSim(): Promise<void>
   onStatus(listener: (status: SimStatus) => void): () => void
   listFlights(): Promise<LogbookFlight[]>
+  /** Removes a finished flight, its track, note and photos, and takes it off any Journey it was a leg of. */
+  deleteFlight(flightId: string): Promise<void>
   flightTrack(flightId: string): Promise<TrackPoint[]>
   /** Every logged flight, and the airports and countries they reached. */
   atlas(): Promise<Atlas>

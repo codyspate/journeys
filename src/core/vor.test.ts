@@ -117,7 +117,7 @@ describe('planning with radio navigation', () => {
         name: '',
         originIdent: from,
         destinationIdent: to,
-        performance: PERFORMANCE_PRESETS[1],
+        performance: PERFORMANCE_PRESETS.find((p) => p.name === 'Cessna 172')!,
         maxLegMinutes: 240,
         limits: { ...NO_LIMITS, ...limits, vorRoutes }
       },

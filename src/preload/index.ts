@@ -13,6 +13,7 @@ const api: JourneysApi = {
   resumeSim: () => ipcRenderer.invoke('sim:resume'),
   onStatus: (listener) => subscribe<SimStatus>('status:changed', listener),
   listFlights: () => ipcRenderer.invoke('logbook:list'),
+  deleteFlight: (flightId) => ipcRenderer.invoke('logbook:delete', flightId),
   flightTrack: (flightId) => ipcRenderer.invoke('logbook:track', flightId),
   atlas: () => ipcRenderer.invoke('logbook:atlas'),
   flightNote: (flightId) => ipcRenderer.invoke('journal:note', flightId),

@@ -8,6 +8,7 @@ import { AirportIndex, airportsFromRows, type AirportRow } from './airports'
 import {
   addVia,
   applyFlight,
+  withoutFlight,
   checkSettings,
   createJourney,
   currentStop,
@@ -106,13 +107,13 @@ describe('planning', () => {
   })
 
   it('still plans across an ocean, flagging the leg without refusing', () => {
-    const legs = planned(create('KSFO', 'PHNL', PERFORMANCE_PRESETS[1]))
+    const legs = planned(create('KSFO', 'PHNL', PERFORMANCE_PRESETS.find((p) => p.name === 'Cessna 172')!))
     expect(legs.at(-1)!.to.ident).toBe('PHNL')
     expect(legs.some((leg) => leg.beyondRange)).toBe(true)
   })
 
   it('only offers runways the aircraft can use', () => {
-    const jet = PERFORMANCE_PRESETS[2]
+    const jet = PERFORMANCE_PRESETS.find((p) => p.name === 'Narrowbody airliner')!
     const legs = planned(create('KSAN', 'KBOS', { ...jet, usableFuelGal: 1200 }, 200))
     for (const leg of legs.slice(0, -1)) {
       const airport = index.get(leg.to.ident)!
@@ -130,6 +131,18 @@ describe('track position', () => {
     expect(onRoute.alongNm).toBeCloseTo(distanceNm(from.lat, from.lon, to.lat, to.lon), 0)
     expect(onRoute.crossNm).toBeLessThan(1)
     expect(trackPosition(from, to, stop('PHNL')).alongNm).toBeLessThan(0)
+  })
+})
+
+describe('performance presets', () => {
+  it('has a unique name and workable numbers for every preset', () => {
+    expect(new Set(PERFORMANCE_PRESETS.map((p) => p.name)).size).toBe(PERFORMANCE_PRESETS.length)
+    for (const performance of PERFORMANCE_PRESETS) {
+      const { cruiseKts, burnGph, usableFuelGal, reserveMinutes } = performance
+      expect(cruiseKts > 0 && burnGph > 0 && usableFuelGal > 0, performance.name).toBe(true)
+      // Every preset can fly at least an hour past its reserve.
+      expect(usableFuelGal / burnGph - reserveMinutes / 60, performance.name).toBeGreaterThan(1)
+    }
   })
 })
 
@@ -154,6 +167,33 @@ describe('updating the plan as you go', () => {
     const updated = applyFlight(create('KSAN', 'KLAX'), flight('KSAN', 'KLAX'), index)!
     expect(updated.status).toBe('complete')
     expect(planned(updated)).toHaveLength(0)
+  })
+
+  it('undoes the latest leg when its flight is deleted, and re-plans from where it started', () => {
+    const once = applyFlight(create(), flight('KSAN', 'KPHX'), index)!
+    const undone = withoutFlight(once, 'KSAN-KPHX', index.all)!
+    expect(undone.legs.some((l) => l.status === 'flown')).toBe(false)
+    expect(currentStop(undone).ident).toBe('KSAN')
+    expect(planned(undone).at(-1)!.to.ident).toBe('KBOS')
+    expect(withoutFlight(once, 'someone-else', index.all)).toBeNull()
+  })
+
+  it('reopens a finished Journey when its last leg is deleted', () => {
+    const done = applyFlight(create('KSAN', 'KLAX'), flight('KSAN', 'KLAX'), index)!
+    const reopened = withoutFlight(done, 'KSAN-KLAX', index.all)!
+    expect(reopened.status).toBe('active')
+    expect(planned(reopened)[0].from.ident).toBe('KSAN')
+  })
+
+  it('keeps an earlier leg on the route when its flight is deleted', () => {
+    const once = applyFlight(create(), flight('KSAN', 'KPHX'), index)!
+    const twice = applyFlight(once, flight('KPHX', 'KTUS'), index)!
+    const kept = withoutFlight(twice, 'KSAN-KPHX', index.all)!
+    expect(kept.legs.filter((l) => l.status === 'flown').map((l) => [l.to.ident, l.flightId])).toEqual([
+      ['KPHX', null],
+      ['KTUS', 'KPHX-KTUS']
+    ])
+    expect(kept.legs.slice(2)).toEqual(twice.legs.slice(2))
   })
 
   it('leaves the Journey alone for a flight from somewhere else', () => {

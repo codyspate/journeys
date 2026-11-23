@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { gunzipSync } from 'node:zlib'
 import { AirportIndex, airportsFromRows, type AirportRow } from '../core/airports'
-import { applyFlight, createJourney, editRoute, reachOptions, reflow, updateSettings } from '../core/planner'
+import { applyFlight, createJourney, editRoute, reachOptions, reflow, updateSettings, withoutFlight } from '../core/planner'
 import { BurnMeter } from '../core/burn'
 import { legBrief, type Town, type TownRow, townsFromRows } from '../core/legBrief'
 import { TerrainGrid } from '../core/terrain'
@@ -138,6 +138,14 @@ export class JourneyService {
   delete(id: string): void {
     this.get(id)
     this.db.prepare('DELETE FROM journeys WHERE id = ?').run(id)
+  }
+
+  /** Takes a flight deleted from the logbook off every Journey it was a leg of, and returns the Journeys changed. */
+  forgetFlight(flightId: string): Journey[] {
+    return this.list().flatMap((journey) => {
+      const updated = withoutFlight(journey, flightId, this.airports.all, this.terrain, this.vors)
+      return updated ? [this.save(updated)] : []
+    })
   }
 
   /** Attaches a finished flight to the current Journey if it departed from where the Journey left off. */

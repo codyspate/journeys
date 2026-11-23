@@ -95,11 +95,45 @@ export interface Performance {
   needsHardSurface: boolean
 }
 
-/** Rough starting points. Players can edit every number per Journey. */
+const preset = (name: string, cruiseKts: number, burnGph: number, usableFuelGal: number, minRunwayFt: number, needsHardSurface = false, reserveMinutes = 45): Performance => ({
+  name,
+  cruiseKts,
+  burnGph,
+  usableFuelGal,
+  reserveMinutes,
+  minRunwayFt,
+  needsHardSurface
+})
+
+/**
+ * Rough starting points, from manufacturers' published cruise figures at a typical cruise power, in US gallons
+ * of whichever fuel the type burns. Players can edit every number per Journey. Names are kept once released:
+ * a Journey remembers its preset by name.
+ */
 export const PERFORMANCE_PRESETS: Performance[] = [
   { name: 'A2A Comanche 250', cruiseKts: 160, burnGph: 14, usableFuelGal: 60, reserveMinutes: 45, minRunwayFt: 2000, needsHardSurface: false },
+  preset('Cessna 152', 95, 6, 24.5, 1500),
   { name: 'Cessna 172', cruiseKts: 120, burnGph: 9, usableFuelGal: 53, reserveMinutes: 45, minRunwayFt: 1500, needsHardSurface: false },
+  preset('Cessna 182 Skylane', 140, 13, 87, 1500),
+  preset('Piper Cherokee / Archer', 120, 9.5, 48, 1700),
+  preset('Diamond DA40 NG', 135, 6.5, 39, 1500),
+  preset('Cirrus SR22', 175, 17, 92, 2000),
+  preset('Beechcraft Bonanza G36', 170, 15, 74, 2000),
+  preset('Backcountry taildragger (XCub, Super Cub)', 110, 8, 50, 800),
+  preset('de Havilland Beaver', 125, 20, 95, 1500),
+  preset('Beechcraft Baron 58', 190, 28, 166, 2500),
+  preset('Diamond DA62', 165, 13, 86, 2000),
+  preset('Kodiak 100', 170, 50, 320, 1500),
+  preset('Cessna 208 Caravan', 170, 55, 332, 2200),
+  preset('Twin Otter', 160, 75, 378, 1500),
+  preset('Pilatus PC-12', 270, 60, 402, 2500),
+  preset('TBM 930 / 960', 300, 60, 282, 3000, true),
+  preset('King Air 350', 300, 100, 539, 3500, true),
+  preset('Citation CJ4', 420, 160, 870, 4000, true),
+  preset('ATR 72-600', 275, 245, 1650, 4500, true),
   { name: 'Narrowbody airliner', cruiseKts: 450, burnGph: 800, usableFuelGal: 6300, reserveMinutes: 45, minRunwayFt: 6000, needsHardSurface: true },
+  preset('Boeing 787-10', 488, 2150, 33380, 9000, true),
+  preset('Boeing 747-8', 490, 3300, 63030, 10000, true),
   { name: 'Fighter jet', cruiseKts: 480, burnGph: 1100, usableFuelGal: 1600, reserveMinutes: 20, minRunwayFt: 7000, needsHardSurface: true }
 ]
 

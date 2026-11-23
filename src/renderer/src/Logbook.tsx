@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { airMinutes, blockMinutes, type FlightJournal, type FlightPhoto, type FlightStatus, type LogbookFlight } from '../../shared/logbook'
 import { Atlas } from './Atlas'
+import { errorText } from './errors'
 import { FlightJournalPanel, Lightbox } from './FlightJournal'
 import { FlightMap } from './FlightMap'
 
@@ -29,9 +30,13 @@ function landingSummary(flight: LogbookFlight): string {
 }
 
 /** One flight opened from the table: its map, note and photos. */
-function FlightDetail({ flight, onClose }: { flight: LogbookFlight; onClose: () => void }) {
+function FlightDetail({ flight, onClose, onDeleted }: { flight: LogbookFlight; onClose: () => void; onDeleted: () => void }) {
   const [photos, setPhotos] = useState<FlightPhoto[]>([])
   const [open, setOpen] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const remove = () =>
+    window.journeys.deleteFlight(flight.id).then(onDeleted, (e) => setError(errorText(e)))
   const loadPhotos = useCallback(() => void window.journeys.flightPhotos?.(flight.id).then(setPhotos), [flight.id])
   useEffect(() => {
     loadPhotos()
@@ -44,10 +49,34 @@ function FlightDetail({ flight, onClose }: { flight: LogbookFlight; onClose: () 
         <strong>
           {flight.aircraft?.title ?? 'Unknown aircraft'} · {new Date(flight.startedAt).toLocaleString()}
         </strong>
-        <button className="link" onClick={onClose}>
-          Close flight
-        </button>
+        <span className="banner-actions">
+          {flight.status !== 'in-progress' && (
+            <button className="link" onClick={() => setDeleting(true)}>
+              Delete flight
+            </button>
+          )}
+          <button className="link" onClick={onClose}>
+            Close flight
+          </button>
+        </span>
       </div>
+      {deleting && (
+        <div className="save-actions">
+          <span>
+            Delete this flight? Its track, note and photos go too, and if it was the latest leg of a Journey, the Journey
+            picks up again from where the flight started. This can't be undone.
+          </span>
+          <button onClick={() => void remove()}>Delete</button>
+          <button className="link" onClick={() => setDeleting(false)}>
+            Keep it
+          </button>
+        </div>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       <FlightMap flight={flight} photos={photos} onOpenPhoto={(id) => setOpen(photos.findIndex((p) => p.id === id))} />
       <FlightJournalPanel flightId={flight.id} photos={photos} onPhotosChanged={loadPhotos} onOpenPhoto={setOpen} />
       {open !== null && open >= 0 && <Lightbox photos={photos} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />}
@@ -85,7 +114,15 @@ export function Logbook() {
       <h2>Logbook</h2>
       {flights?.length === 0 && <p className="muted">Flights appear here automatically once you start moving.</p>}
       {selected ? (
-        <FlightDetail key={selected.id} flight={selected} onClose={() => setSelectedId(null)} />
+        <FlightDetail
+          key={selected.id}
+          flight={selected}
+          onClose={() => setSelectedId(null)}
+          onDeleted={() => {
+            setFlights((all) => all?.filter((f) => f.id !== selected.id) ?? null)
+            setSelectedId(null)
+          }}
+        />
       ) : (
         flights && flights.length > 0 && <Atlas />
       )}
