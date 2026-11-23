@@ -10,6 +10,7 @@ function subscribe<T>(channel: string, listener: (value: T) => void): () => void
 const api: JourneysApi = {
   getStatus: () => ipcRenderer.invoke('status:get'),
   liveSim: () => ipcRenderer.invoke('sim:live'),
+  resumeSim: () => ipcRenderer.invoke('sim:resume'),
   onStatus: (listener) => subscribe<SimStatus>('status:changed', listener),
   listFlights: () => ipcRenderer.invoke('logbook:list'),
   flightTrack: (flightId) => ipcRenderer.invoke('logbook:track', flightId),

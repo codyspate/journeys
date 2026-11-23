@@ -77,7 +77,7 @@ beforeEach(() => {
   port = new FakePort()
   store = new MemoryStore()
   offers = []
-  settings = { saveAircraftLocation: true, noTeleport: false, shareWithAssistants: false, showUnfinishedFlights: false, descent: DEFAULT_DESCENT }
+  settings = { saveAircraftLocation: true, noTeleport: false, shareWithAssistants: false, showUnfinishedFlights: false, descent: DEFAULT_DESCENT, mapStyle: 'dark', terrainShading: false }
   tracker = new AirframeTracker(port, store, () => settings, (offer) => offers.push(offer), noWait)
   t = 1_000_000
 })

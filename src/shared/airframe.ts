@@ -33,6 +33,9 @@ export interface RestoreOffer {
   location: ParkedLocation | null
 }
 
+/** The base map every map in the app is drawn on. */
+export type MapStyleId = 'dark' | 'light' | 'colorful'
+
 export interface Settings {
   saveAircraftLocation: boolean
   /** Only log flights that take off from where the aircraft last landed. */
@@ -43,6 +46,9 @@ export interface Settings {
   showUnfinishedFlights: boolean
   /** The top-of-descent pause, for whichever Journey is being flown. Remembered across restarts. */
   descent: DescentSettings
+  mapStyle: MapStyleId
+  /** Shade hills and mountains on every map. */
+  terrainShading: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -50,7 +56,9 @@ export const DEFAULT_SETTINGS: Settings = {
   noTeleport: true,
   shareWithAssistants: false,
   showUnfinishedFlights: false,
-  descent: DEFAULT_DESCENT
+  descent: DEFAULT_DESCENT,
+  mapStyle: 'dark',
+  terrainShading: false
 }
 
 /** What the sim is doing right now, for the Home screen. */

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Settings as AppSettings } from '../../shared/airframe'
 import { errorText } from './errors'
+import { MAP_STYLES, setMapLook } from './mapLook'
+import type { MapStyleId } from '../../shared/airframe'
 import { PhotoSettingsPanel } from './FlightJournal'
 import { VersionSettings } from './Updates'
 import { AssistantAccess, YourData } from './YourData'
@@ -125,6 +127,19 @@ export function Settings() {
           <DescentTiming settings={settings} onSave={update} />
 
           <h3>Maps</h3>
+          <label className="field small">
+            <span>Map style</span>
+            <select value={settings.mapStyle} onChange={(e) => void setMapLook({ style: e.target.value as MapStyleId }).then(setSettings)}>
+              {MAP_STYLES.map((style) => (
+                <option key={style.id} value={style.id}>
+                  {style.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Toggle checked={settings.terrainShading} onChange={(on) => void setMapLook({ terrain: on }).then(setSettings)} title="Shade terrain">
+            <span className="muted">Draw hills and mountains on every map. You can also change both from the corner of any map.</span>
+          </Toggle>
           <Toggle
             checked={settings.showUnfinishedFlights ?? false}
             onChange={(on) => void update({ showUnfinishedFlights: on })}

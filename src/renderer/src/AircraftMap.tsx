@@ -2,7 +2,8 @@ import { type GeoJSONSource, Map as MapLibreMap, NavigationControl, Popup } from
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { type AircraftFlight, airMinutes } from '../../shared/logbook'
 import { aircraftTracks, routeLabel } from './aircraftTracks'
-import { OUTLINE, STYLE_URL } from './mapSetup'
+import { lookKey, MapStyleSwitch, shadeTerrain, styleUrl, useMapLook } from './mapLook'
+import { OUTLINE } from './mapSetup'
 
 const LINE = '#5598e7'
 const HIGHLIGHT = '#f2b544'
@@ -33,7 +34,7 @@ export function AircraftMap({ airframeKey }: { airframeKey: string }) {
 }
 
 /** Many flights on one map, with a list to pick one out. Used per aircraft and for the atlas. */
-export function FlightsMap({
+function FlightsMapView({
   flights,
   label,
   emptyText,
@@ -59,7 +60,7 @@ export function FlightsMap({
 
   useEffect(() => {
     if (!container.current) return
-    const map = new MapLibreMap({ container: container.current, style: STYLE_URL, center: [-98, 39], zoom: 2, dragRotate: false, attributionControl: { compact: true } })
+    const map = new MapLibreMap({ container: container.current, style: styleUrl(), center: [-98, 39], zoom: 2, dragRotate: false, attributionControl: { compact: true } })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
     mapRef.current = map
     let styleArrived = false
@@ -69,6 +70,7 @@ export function FlightsMap({
       if (!styleArrived) setFailed(true)
     })
     map.on('load', () => {
+      shadeTerrain(map)
       const empty = { type: 'FeatureCollection' as const, features: [] }
       map.addSource('aircraft-lines', { type: 'geojson', data: empty })
       map.addSource('aircraft-landings', { type: 'geojson', data: empty })
@@ -184,6 +186,7 @@ export function FlightsMap({
       ) : (
         <div className="journey-map aircraft-map">
           <div ref={container} className="journey-map-canvas" role="region" aria-label={label} />
+          <MapStyleSwitch />
         </div>
       )}
       {flights && (
@@ -215,4 +218,10 @@ export function FlightsMap({
       )}
     </div>
   )
+}
+
+/** Drawn afresh whenever the map style or terrain shading changes. */
+export function FlightsMap(props: Parameters<typeof FlightsMapView>[0]) {
+  const look = useMapLook()
+  return <FlightsMapView key={lookKey(look)} {...props} />
 }

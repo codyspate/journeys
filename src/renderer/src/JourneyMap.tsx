@@ -3,16 +3,43 @@ import { type GeoJSONSource, Map as MapLibreMap, type MapGeoJSONFeature, type Ma
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { AirportSize, Journey, RouteEdit } from '../../shared/journey'
 import { airportFeatures, type AirportProperties, journeyMapData, routeIdents, type StopProperties } from './mapData'
-import { LABEL_FONT, STYLE_URL } from './mapSetup'
+import { isLightMap, lookKey, MapStyleSwitch, shadeTerrain, styleUrl, useMapLook } from './mapLook'
+import { LABEL_FONT } from './mapSetup'
 
-const COLOR = { flown: '#5fd08a', planned: '#f2b544', tentative: '#8f9db3', stop: '#e6ebf3', outline: '#0e1420', vor: '#7fc9d9' }
+// Labels get a halo the opposite of the map under them, so they read on dark and light styles alike.
+const DARK_COLORS = {
+  flown: '#5fd08a',
+  planned: '#f2b544',
+  tentative: '#8f9db3',
+  stop: '#e6ebf3',
+  outline: '#0e1420',
+  vor: '#7fc9d9',
+  vorFill: '#0e1420',
+  label: '#e6ebf3',
+  halo: '#0e1420',
+  airport: { small: '#64809f', medium: '#7fa8d4', large: '#9cc4ee' } as Record<AirportSize, string>
+}
+const LIGHT_COLORS: typeof DARK_COLORS = {
+  flown: '#16a34a',
+  planned: '#e09a10',
+  tentative: '#4f5f78',
+  stop: '#ffffff',
+  outline: '#1a2230',
+  vor: '#0e7490',
+  vorFill: '#ffffff',
+  label: '#1a2230',
+  halo: '#ffffff',
+  airport: { small: '#6b7f99', medium: '#3f6ea8', large: '#1f4f8a' }
+}
+/** Set when each map is made, from the style it's drawn on. */
+let COLOR = DARK_COLORS
 const CLICK_MARGIN_PX = 6
 
 // Smaller fields appear as you zoom in. Listed bottom to top, so bigger airports win a crowded click.
-const AIRPORT_TIERS: { size: AirportSize; dotZoom: number; labelZoom: number; radius: number; color: string }[] = [
-  { size: 'small', dotZoom: 7, labelZoom: 9.5, radius: 3, color: '#64809f' },
-  { size: 'medium', dotZoom: 5, labelZoom: 7.5, radius: 3.5, color: '#7fa8d4' },
-  { size: 'large', dotZoom: 2.5, labelZoom: 5, radius: 4.5, color: '#9cc4ee' }
+const AIRPORT_TIERS: { size: AirportSize; dotZoom: number; labelZoom: number; radius: number }[] = [
+  { size: 'small', dotZoom: 7, labelZoom: 9.5, radius: 3 },
+  { size: 'medium', dotZoom: 5, labelZoom: 7.5, radius: 3.5 },
+  { size: 'large', dotZoom: 2.5, labelZoom: 5, radius: 4.5 }
 ]
 const AIRPORT_DOT_LAYERS = AIRPORT_TIERS.map((tier) => `airports-${tier.size}`)
 
@@ -30,7 +57,7 @@ function addAirportLayers(map: MapLibreMap): void {
       source: 'airports',
       minzoom: tier.dotZoom,
       filter,
-      paint: { 'circle-radius': tier.radius, 'circle-color': tier.color, 'circle-stroke-width': 1, 'circle-stroke-color': COLOR.outline }
+      paint: { 'circle-radius': tier.radius, 'circle-color': COLOR.airport[tier.size], 'circle-stroke-width': 1, 'circle-stroke-color': COLOR.outline }
     })
     map.addLayer({
       id: `airports-${tier.size}-labels`,
@@ -39,7 +66,7 @@ function addAirportLayers(map: MapLibreMap): void {
       minzoom: tier.labelZoom,
       filter,
       layout: { 'text-field': ['get', 'ident'], 'text-font': LABEL_FONT, 'text-size': 11, 'text-offset': [0, 0.8], 'text-anchor': 'top' },
-      paint: { 'text-color': tier.color, 'text-halo-color': COLOR.outline, 'text-halo-width': 1.2 }
+      paint: { 'text-color': COLOR.airport[tier.size], 'text-halo-color': COLOR.halo, 'text-halo-width': 1.2 }
     })
   }
 }
@@ -98,7 +125,7 @@ function addRouteLayers(map: MapLibreMap): void {
     id: 'journey-vors-rings',
     type: 'circle',
     source: 'journey-vors',
-    paint: { 'circle-radius': 4, 'circle-color': COLOR.outline, 'circle-stroke-width': 2, 'circle-stroke-color': COLOR.vor }
+    paint: { 'circle-radius': 4, 'circle-color': COLOR.vorFill, 'circle-stroke-width': 2, 'circle-stroke-color': COLOR.vor }
   })
   map.addLayer({
     id: 'journey-vors-labels',
@@ -112,7 +139,7 @@ function addRouteLayers(map: MapLibreMap): void {
       'text-offset': [0, -1],
       'text-anchor': 'bottom'
     },
-    paint: { 'text-color': COLOR.vor, 'text-halo-color': COLOR.outline, 'text-halo-width': 1.5 }
+    paint: { 'text-color': COLOR.vor, 'text-halo-color': COLOR.halo, 'text-halo-width': 1.5 }
   })
   map.addLayer({
     id: 'journey-stops-dots',
@@ -137,7 +164,7 @@ function addRouteLayers(map: MapLibreMap): void {
       'text-anchor': 'top',
       'text-allow-overlap': true
     },
-    paint: { 'text-color': COLOR.stop, 'text-halo-color': COLOR.outline, 'text-halo-width': 1.5 }
+    paint: { 'text-color': COLOR.label, 'text-halo-color': COLOR.halo, 'text-halo-width': 1.5 }
   })
 }
 
@@ -202,7 +229,7 @@ interface JourneyMapProps {
   onEdit: (edit: RouteEdit) => void
 }
 
-export function JourneyMap({ journey, fallback, onEdit }: JourneyMapProps) {
+function JourneyMapView({ journey, fallback, onEdit }: JourneyMapProps) {
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const fit = useRef<() => void>(() => {})
@@ -217,9 +244,10 @@ export function JourneyMap({ journey, fallback, onEdit }: JourneyMapProps) {
 
   useEffect(() => {
     if (!container.current) return
+    COLOR = isLightMap() ? LIGHT_COLORS : DARK_COLORS
     const map = new MapLibreMap({
       container: container.current,
-      style: STYLE_URL,
+      style: styleUrl(),
       center: [-98, 39],
       zoom: 2,
       dragRotate: false,
@@ -238,6 +266,7 @@ export function JourneyMap({ journey, fallback, onEdit }: JourneyMapProps) {
       if (!styleArrived) setFailed(true)
     })
     map.on('load', () => {
+      shadeTerrain(map)
       addAirportLayers(map)
       addRouteLayers(map)
       addDragLayers(map)
@@ -457,9 +486,16 @@ export function JourneyMap({ journey, fallback, onEdit }: JourneyMapProps) {
   return (
     <div className="journey-map">
       <div ref={container} className="journey-map-canvas" role="region" aria-label={`Map of ${journey.name}`} />
+      <MapStyleSwitch />
       {journey.status === 'active' && (
         <p className="map-hint">Drag a stop onto another airport to change it. Zoom in for smaller airports.</p>
       )}
     </div>
   )
+}
+
+/** Drawn afresh whenever the map style or terrain shading changes. */
+export function JourneyMap(props: Parameters<typeof JourneyMapView>[0]) {
+  const look = useMapLook()
+  return <JourneyMapView key={lookKey(look)} {...props} />
 }

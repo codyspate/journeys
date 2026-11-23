@@ -5,7 +5,8 @@ import type { LiveSim } from '../../shared/airframe'
 import type { Stop, VorFix } from '../../shared/journey'
 import { isRealPosition } from '../../shared/logbook'
 import { unwrapLongitudes } from './mapData'
-import { OUTLINE, STYLE_URL } from './mapSetup'
+import { lookKey, MapStyleSwitch, shadeTerrain, styleUrl, useMapLook } from './mapLook'
+import { OUTLINE } from './mapSetup'
 
 const POLL_MS = 1000
 /** New trail points closer than this to the last one add nothing visible. */
@@ -51,7 +52,7 @@ function distanceNm(a: { lat: number; lon: number }, b: { lat: number; lon: numb
  * The aircraft where it is right now, the trail it has flown this flight and the leg it's flying,
  * updated every second. The view follows the aircraft until the player pans away.
  */
-export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop; vorRoute?: VorFix[] | null } | null }) {
+function LiveFlightMapView({ leg }: { leg: { from: Stop; to: Stop; vorRoute?: VorFix[] | null } | null }) {
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const trail = useRef<Coordinates[]>([])
@@ -81,7 +82,7 @@ export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop; vorRoute?:
 
   useEffect(() => {
     if (!container.current) return
-    const map = new MapLibreMap({ container: container.current, style: STYLE_URL, center: [-98, 39], zoom: 3, dragRotate: false, attributionControl: { compact: true } })
+    const map = new MapLibreMap({ container: container.current, style: styleUrl(), center: [-98, 39], zoom: 3, dragRotate: false, attributionControl: { compact: true } })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
     mapRef.current = map
     let styleArrived = false
@@ -91,6 +92,7 @@ export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop; vorRoute?:
       if (!styleArrived) setFailed(true)
     })
     map.on('load', () => {
+      shadeTerrain(map)
       map.addImage('aircraft', aircraftIcon(), { pixelRatio: 2 })
       const empty = { type: 'FeatureCollection' as const, features: [] }
       for (const id of ['live-leg', 'live-trail', 'live-aircraft']) map.addSource(id, { type: 'geojson', data: empty })
@@ -178,6 +180,7 @@ export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop; vorRoute?:
     <div className="live-map-panel">
       <div className="journey-map live-map">
         <div ref={container} className="journey-map-canvas" role="region" aria-label="Live map of your flight" />
+        <MapStyleSwitch />
         {!position && (
           <p className="live-empty">{live?.connected ? 'Waiting for a flight to load.' : 'Your aircraft will show here when the sim is running.'}</p>
         )}
@@ -209,4 +212,10 @@ export function LiveFlightMap({ leg }: { leg: { from: Stop; to: Stop; vorRoute?:
       </div>
     </div>
   )
+}
+
+/** Drawn afresh whenever the map style or terrain shading changes. */
+export function LiveFlightMap(props: Parameters<typeof LiveFlightMapView>[0]) {
+  const look = useMapLook()
+  return <LiveFlightMapView key={lookKey(look)} {...props} />
 }

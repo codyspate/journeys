@@ -358,6 +358,12 @@ void app.whenReady().then(() => {
     }
   })
 
+  /** Undoes the descent pause, and any Esc-style pause an older version left behind. */
+  ipcMain.handle('sim:resume', () => {
+    sim.fireEvent('PAUSE_SET', 0)
+    sim.fireEvent('PAUSE_OFF')
+  })
+
   const descent = new DescentWatcher()
   sim.on('telemetry', (sample: TelemetrySample) => {
     lastSample = sample
@@ -366,7 +372,9 @@ void app.whenReady().then(() => {
     const tod = descent.ingest(sample, next?.target ?? null, airframes.settings.descent)
     if (tod) {
       try {
-        sim.fireEvent('PAUSE_ON')
+        // PAUSE_SET is the sim's plain simulation pause. PAUSE_ON is an Esc-style pause without the menu: only Esc
+        // undid it, and the aircraft came back with no speed and dead controls.
+        sim.fireEvent('PAUSE_SET', 1)
       } catch (error) {
         console.error('Could not pause the sim:', error)
       }

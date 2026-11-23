@@ -12,7 +12,8 @@ import {
   RAMP,
   type TrackMetric
 } from './flightTrack'
-import { OUTLINE, STYLE_URL } from './mapSetup'
+import { lookKey, MapStyleSwitch, shadeTerrain, styleUrl, useMapLook } from './mapLook'
+import { OUTLINE } from './mapSetup'
 
 const HOVER_PX = 10
 
@@ -31,7 +32,7 @@ function tooltip(point: PlottedPoint, startedAt: number): HTMLElement {
 }
 
 /** A recorded flight on the map, coloured by the measure the player picks. */
-export function FlightMap({ flight, photos = [], onOpenPhoto }: { flight: LogbookFlight; photos?: FlightPhoto[]; onOpenPhoto?: (id: string) => void }) {
+function FlightMapView({ flight, photos = [], onOpenPhoto }: { flight: LogbookFlight; photos?: FlightPhoto[]; onOpenPhoto?: (id: string) => void }) {
   const latestOpen = useRef(onOpenPhoto)
   latestOpen.current = onOpenPhoto
   const container = useRef<HTMLDivElement>(null)
@@ -61,7 +62,7 @@ export function FlightMap({ flight, photos = [], onOpenPhoto }: { flight: Logboo
 
   useEffect(() => {
     if (!container.current) return
-    const map = new MapLibreMap({ container: container.current, style: STYLE_URL, center: [-98, 39], zoom: 2, dragRotate: false, attributionControl: { compact: true } })
+    const map = new MapLibreMap({ container: container.current, style: styleUrl(), center: [-98, 39], zoom: 2, dragRotate: false, attributionControl: { compact: true } })
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
     mapRef.current = map
     let styleArrived = false
@@ -71,6 +72,7 @@ export function FlightMap({ flight, photos = [], onOpenPhoto }: { flight: Logboo
       if (!styleArrived) setFailed(true)
     })
     map.on('load', () => {
+      shadeTerrain(map)
       const empty = { type: 'FeatureCollection' as const, features: [] }
       // lineMetrics lets the colour change along a single line.
       map.addSource('flight-track', { type: 'geojson', data: empty, lineMetrics: true })
@@ -189,9 +191,16 @@ export function FlightMap({ flight, photos = [], onOpenPhoto }: { flight: Logboo
       ) : (
         <div className="journey-map flight-map">
           <div ref={container} className="journey-map-canvas" role="region" aria-label="Map of the selected flight" />
+          <MapStyleSwitch />
           {track === null && <p className="map-hint">No recorded path for this flight.</p>}
         </div>
       )}
     </div>
   )
+}
+
+/** Drawn afresh whenever the map style or terrain shading changes. */
+export function FlightMap(props: Parameters<typeof FlightMapView>[0]) {
+  const look = useMapLook()
+  return <FlightMapView key={lookKey(look)} {...props} />
 }

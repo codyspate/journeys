@@ -100,6 +100,8 @@ export interface JourneysApi {
   getStatus(): Promise<SimStatus>
   /** Where the loaded aircraft is right now. */
   liveSim(): Promise<LiveSim>
+  /** Unpauses the sim after the descent pause. */
+  resumeSim(): Promise<void>
   onStatus(listener: (status: SimStatus) => void): () => void
   listFlights(): Promise<LogbookFlight[]>
   flightTrack(flightId: string): Promise<TrackPoint[]>
